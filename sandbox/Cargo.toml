@@ -1,0 +1,8 @@
+[package]
+name = "sandbox"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+chronos = { path = "../chronos" }
+winit = "0.30.12"
