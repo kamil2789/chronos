@@ -96,6 +96,4 @@ impl ApplicationHandler for ChronosWindow {
 }
 
 #[cfg(test)]
-mod tests {
-    
-}
+mod tests {}
