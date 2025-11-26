@@ -162,13 +162,13 @@ mod tests {
             .with_rotation(vec3(4.0, 5.0, 6.0))
             .with_scale(vec3(7.0, 8.0, 9.0))
             .build();
-        
+
         let expected = Transform::new(
             vec3(1.0, 2.0, 3.0),
             vec3(4.0, 5.0, 6.0),
             vec3(7.0, 8.0, 9.0),
         );
-        
+
         assert!(result.matrix().abs_diff_eq(expected.matrix(), EPSILON));
     }
 
@@ -193,7 +193,7 @@ mod tests {
 
         let vertex = vec4(2.0, 3.0, 4.0, 1.0);
         let result = matrix * vertex;
-        
+
         let expected = vec4(2.0, 0.5980762, 4.964102, 1.0);
         assert!(result.abs_diff_eq(expected, EPSILON));
     }
@@ -202,7 +202,7 @@ mod tests {
     fn test_rotation_axis_angle() {
         let transform = Transform::from_rotation_axis_angle(vec3(1.0, 1.5, 3.0), 4.0);
         let result = transform.matrix();
-        
+
         // Expected matrix for rotation around normalized axis (1, 1.5, 3) by 4 degrees
         assert!(result.w_axis.w.abs_diff_eq(&1.0, EPSILON));
         assert!(result.w_axis.x.abs_diff_eq(&0.0, EPSILON));
@@ -217,7 +217,7 @@ mod tests {
             vec3(0.0, 0.0, 0.0),
             vec3(1.0, 1.0, 1.0),
         );
-        
+
         let expected = Mat4::from_translation(vec3(1.0, 2.0, 3.0));
         assert_eq!(result.matrix(), expected);
     }

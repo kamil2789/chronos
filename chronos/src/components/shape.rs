@@ -48,8 +48,8 @@ impl Shape {
 
 #[cfg(test)]
 mod tests {
-    use approx::assert_relative_eq;
     use super::*;
+    use approx::assert_relative_eq;
 
     #[test]
     fn test_new_with_vertices() {
@@ -111,9 +111,8 @@ mod tests {
 
         // Check if first point is at correct distance from center
         let first_point = circle.get_vertices()[1];
-        let distance = ((first_point.x - center.x).powi(2)
-            + (first_point.y - center.y).powi(2))
-        .sqrt();
+        let distance =
+            ((first_point.x - center.x).powi(2) + (first_point.y - center.y).powi(2)).sqrt();
         assert_relative_eq!(distance, radius, epsilon = 0.0001);
     }
 
