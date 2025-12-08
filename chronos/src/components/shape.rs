@@ -26,6 +26,7 @@ impl Shape {
     }
 
     #[must_use]
+    #[allow(clippy::cast_precision_loss)]
     pub fn new_circle(center: Vec3, radius: f32, segments: usize) -> Self {
         let mut vertices = Vec::with_capacity(segments + 1);
 
