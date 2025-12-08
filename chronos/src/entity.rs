@@ -29,7 +29,7 @@ impl EntityManager {
     }
 
     #[must_use]
-    pub fn get_component_by_id<T: 'static>(&self, entity_id: usize) -> Option<&T> {
+    pub fn get_component<T: 'static>(&self, entity_id: usize) -> Option<&T> {
         self.components.get_component::<T>(entity_id)
     }
 
@@ -106,10 +106,10 @@ mod tests {
         );
 
         let id = entity_manager.create_entity((shape.clone(),));
-        let retrieved_shape = entity_manager.get_component_by_id::<Shape>(id).unwrap();
+        let retrieved_shape = entity_manager.get_component::<Shape>(id).unwrap();
 
         assert_eq!(retrieved_shape.get_vertices(), shape.get_vertices());
-        assert!(entity_manager.get_component_by_id::<Color>(id).is_none());
+        assert!(entity_manager.get_component::<Color>(id).is_none());
     }
 
     #[test]
@@ -124,8 +124,8 @@ mod tests {
         let color = Color::Uniform(RGBA::default());
 
         let id = entity_manager.create_entity((shape.clone(), color.clone()));
-        let retrieved_shape = entity_manager.get_component_by_id::<Shape>(id).unwrap();
-        let retrieved_color = entity_manager.get_component_by_id::<Color>(id).unwrap();
+        let retrieved_shape = entity_manager.get_component::<Shape>(id).unwrap();
+        let retrieved_color = entity_manager.get_component::<Color>(id).unwrap();
 
         assert_eq!(retrieved_shape.get_vertices(), shape.get_vertices());
         assert!(retrieved_color.is_uniform());
@@ -146,13 +146,13 @@ mod tests {
         let color = Color::Uniform(RGBA::default());
         let id = entity_manager.create_entity((shape, color));
 
-        let retrieved_shape = entity_manager.get_component_by_id::<Shape>(id).unwrap();
+        let retrieved_shape = entity_manager.get_component::<Shape>(id).unwrap();
         assert!(retrieved_shape.get_vertices().len() == 3);
         assert_eq!(entity_manager.get_entity_count(), 1);
 
         entity_manager.remove_entity(id);
-        assert!(entity_manager.get_component_by_id::<Shape>(id).is_none());
-        assert!(entity_manager.get_component_by_id::<Color>(id).is_none());
+        assert!(entity_manager.get_component::<Shape>(id).is_none());
+        assert!(entity_manager.get_component::<Color>(id).is_none());
 
         assert_eq!(entity_manager.get_entity_count(), 0);
     }
@@ -170,8 +170,8 @@ mod tests {
         let color = Color::Uniform(RGBA::new(120, 130, 140, 255_f32));
         entity_manager.add_component(id, color.clone());
 
-        let retrieved_shape = entity_manager.get_component_by_id::<Shape>(id).unwrap();
-        let retrieved_color = entity_manager.get_component_by_id::<Color>(id).unwrap();
+        let retrieved_shape = entity_manager.get_component::<Shape>(id).unwrap();
+        let retrieved_color = entity_manager.get_component::<Color>(id).unwrap();
 
         assert_eq!(retrieved_shape, &shape);
         assert_eq!(retrieved_color, &color);

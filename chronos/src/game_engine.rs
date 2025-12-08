@@ -1,6 +1,6 @@
 use crate::window::{ChronosWindow, WinError, WindowConfig};
 
-pub type Result<T> = std::result::Result<T, WinError>;
+pub type Result<T> = std::result::Result<T, EngineError>;
 
 #[derive(thiserror::Error, Debug)]
 pub enum EngineError {

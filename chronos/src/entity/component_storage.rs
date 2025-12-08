@@ -206,7 +206,6 @@ mod tests {
     #[test]
     fn test_sparse_set_add_component() {
         let mut sparse_set: SparseSet<String> = SparseSet::new(10);
-        sparse_set.resize(10);
         sparse_set.add(0, "Hello".to_string());
         sparse_set.add(1, "World".to_string());
         sparse_set.add(2, "Engine".to_string());
@@ -221,7 +220,6 @@ mod tests {
     #[test]
     fn test_sparse_set_remove_component() {
         let mut sparse_set: SparseSet<String> = SparseSet::new(10);
-        sparse_set.resize(10);
         sparse_set.add(0, "Hello".to_string());
         sparse_set.add(5, "World".to_string());
         sparse_set.add(7, "Engine".to_string());
@@ -241,7 +239,6 @@ mod tests {
     #[test]
     fn test_sparse_set_add_remove_mixed() {
         let mut sparse_set: SparseSet<String> = SparseSet::new(10);
-        sparse_set.resize(10);
         sparse_set.add(0, "Hello".to_string());
         sparse_set.add(5, "World".to_string());
         sparse_set.add(7, "Engine".to_string());
