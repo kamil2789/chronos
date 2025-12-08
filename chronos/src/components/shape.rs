@@ -1,6 +1,6 @@
 use glam::Vec3;
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Debug)]
 pub struct Shape {
     vertices: Vec<Vec3>,
 }

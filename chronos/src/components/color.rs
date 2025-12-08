@@ -1,10 +1,10 @@
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Debug)]
 pub struct RGBA {
     rgb: glam::U8Vec3,
     alpha: f32,
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Debug)]
 pub enum Color {
     Uniform(RGBA),
     PerVertex(Vec<f32>),

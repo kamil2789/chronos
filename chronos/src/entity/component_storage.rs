@@ -3,11 +3,10 @@ use std::{
     collections::HashMap,
 };
 
-use crate::entity;
-
-pub struct ComponentStorage {
-    storages: HashMap<TypeId, Box<dyn Any>>,
-    capacity: usize,
+trait Component {
+    fn remove_component(&mut self, entity_id: usize);
+    fn as_any_mut(&mut self) -> &mut dyn Any;
+    fn as_any(&self) -> &dyn Any;
 }
 
 struct SparseSet<T> {
@@ -16,18 +15,39 @@ struct SparseSet<T> {
     entities: Vec<usize>,
 }
 
+pub struct ComponentStorage {
+    storages: HashMap<TypeId, Box<dyn Component>>,
+    initial_capacity: usize,
+}
+
+impl<T: 'static> Component for SparseSet<T> {
+    fn remove_component(&mut self, entity_id: usize) {
+        self.remove(entity_id);
+    }
+
+    fn as_any_mut(&mut self) -> &mut dyn Any {
+        self
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+}
+
 impl ComponentStorage {
-    pub fn new(capacity: usize) -> Self {
+    pub fn new(initial_capacity: usize) -> Self {
         Self {
             storages: HashMap::new(),
-            capacity,
+            initial_capacity: initial_capacity,
         }
     }
 
     pub fn register_component_type<T: 'static>(&mut self) {
         let type_id = TypeId::of::<T>();
-        self.storages
-            .insert(type_id, Box::new(SparseSet::<T>::new(self.capacity)));
+        self.storages.insert(
+            type_id,
+            Box::new(SparseSet::<T>::new(self.initial_capacity)),
+        );
     }
 
     pub fn add_component<T: 'static>(&mut self, entity_id: usize, component: T) {
@@ -37,8 +57,12 @@ impl ComponentStorage {
             self.register_component_type::<T>();
         }
 
+        if self.needs_sparse_set_resize::<T>(entity_id) {
+            self.resize_sparse_set::<T>();
+        }
+
         if let Some(sparse_set) = self.get_mut_sparse_set::<T>() {
-            sparse_set.add_component(entity_id, component);
+            sparse_set.add(entity_id, component);
         } else {
             debug_assert!(
                 false,
@@ -47,21 +71,51 @@ impl ComponentStorage {
         }
     }
 
+    pub fn remove_all_components(&mut self, entity_id: usize) {
+        for storage in self.storages.values_mut() {
+            storage.remove_component(entity_id);
+        }
+    }
+
     pub fn get_component<T: 'static>(&self, entity_id: usize) -> Option<&T> {
         let sparse_set = self.get_sparse_set::<T>()?;
         sparse_set.get_component(entity_id)
     }
 
+    pub fn has_component<T: 'static>(&self, entity_id: usize) -> bool {
+        if let Some(sparse_set) = self.get_sparse_set::<T>() {
+            sparse_set.get_component(entity_id).is_some()
+        } else {
+            false
+        }
+    }
+
+    fn needs_sparse_set_resize<T: 'static>(&self, entity_id: usize) -> bool {
+        if let Some(sparse_set) = self.get_sparse_set::<T>() {
+            entity_id >= sparse_set.get_sparse_array_size()
+        } else {
+            false
+        }
+    }
+
+    fn resize_sparse_set<T: 'static>(&mut self) {
+        self.initial_capacity *= 2;
+        let initial_capacity = self.initial_capacity;
+        if let Some(sparse_set) = self.get_mut_sparse_set::<T>() {
+            sparse_set.resize(initial_capacity);
+        }
+    }
+
     fn get_mut_sparse_set<T: 'static>(&mut self) -> Option<&mut SparseSet<T>> {
         let type_id = TypeId::of::<T>();
         let storage = self.storages.get_mut(&type_id)?;
-        storage.downcast_mut::<SparseSet<T>>()
+        storage.as_any_mut().downcast_mut::<SparseSet<T>>()
     }
 
     fn get_sparse_set<T: 'static>(&self) -> Option<&SparseSet<T>> {
         let type_id = TypeId::of::<T>();
         let storage = self.storages.get(&type_id)?;
-        storage.downcast_ref::<SparseSet<T>>()
+        storage.as_any().downcast_ref::<SparseSet<T>>()
     }
 }
 
@@ -84,7 +138,7 @@ impl<T> SparseSet<T> {
         self.sparse.resize(new_size, None);
     }
 
-    pub fn remove_component(&mut self, entity_id: usize) {
+    pub fn remove(&mut self, entity_id: usize) {
         if let Some(index) = self.get_component_dense_index(entity_id) {
             self.dense.swap_remove(index);
 
@@ -101,7 +155,7 @@ impl<T> SparseSet<T> {
         }
     }
 
-    pub fn add_component(&mut self, entity_id: usize, component: T) {
+    pub fn add(&mut self, entity_id: usize, component: T) {
         if entity_id < self.sparse.len() {
             self.dense.push(component);
             self.entities.push(entity_id);
@@ -110,7 +164,7 @@ impl<T> SparseSet<T> {
         } else {
             debug_assert!(
                 entity_id < self.sparse.len(),
-                "EntityManager should ensure entity_id is valid"
+                "ComponentStorage should ensure entity_id is valid"
             );
         }
     }
@@ -122,6 +176,10 @@ impl<T> SparseSet<T> {
             }
         }
         None
+    }
+
+    pub fn get_sparse_array_size(&self) -> usize {
+        self.sparse.len()
     }
 
     fn get_component_dense_index(&self, entity_id: usize) -> Option<usize> {
@@ -136,6 +194,7 @@ impl<T> SparseSet<T> {
 
 #[cfg(test)]
 mod tests {
+    use super::ComponentStorage;
     use super::SparseSet;
 
     #[test]
@@ -150,9 +209,9 @@ mod tests {
     fn test_sparse_set_add_component() {
         let mut sparse_set: SparseSet<String> = SparseSet::new(10);
         sparse_set.resize(10);
-        sparse_set.add_component(0, "Hello".to_string());
-        sparse_set.add_component(1, "World".to_string());
-        sparse_set.add_component(2, "Engine".to_string());
+        sparse_set.add(0, "Hello".to_string());
+        sparse_set.add(1, "World".to_string());
+        sparse_set.add(2, "Engine".to_string());
 
         assert_eq!(sparse_set.dense.len(), 3);
         assert_eq!(sparse_set.entities.len(), 3);
@@ -165,11 +224,11 @@ mod tests {
     fn test_sparse_set_remove_component() {
         let mut sparse_set: SparseSet<String> = SparseSet::new(10);
         sparse_set.resize(10);
-        sparse_set.add_component(0, "Hello".to_string());
-        sparse_set.add_component(5, "World".to_string());
-        sparse_set.add_component(7, "Engine".to_string());
+        sparse_set.add(0, "Hello".to_string());
+        sparse_set.add(5, "World".to_string());
+        sparse_set.add(7, "Engine".to_string());
 
-        sparse_set.remove_component(5);
+        sparse_set.remove(5);
 
         assert_eq!(sparse_set.dense.len(), 2);
         assert_eq!(sparse_set.entities.len(), 2);
@@ -185,12 +244,12 @@ mod tests {
     fn test_sparse_set_add_remove_mixed() {
         let mut sparse_set: SparseSet<String> = SparseSet::new(10);
         sparse_set.resize(10);
-        sparse_set.add_component(0, "Hello".to_string());
-        sparse_set.add_component(5, "World".to_string());
-        sparse_set.add_component(7, "Engine".to_string());
+        sparse_set.add(0, "Hello".to_string());
+        sparse_set.add(5, "World".to_string());
+        sparse_set.add(7, "Engine".to_string());
 
-        sparse_set.remove_component(5);
-        sparse_set.add_component(2, "Chronos".to_string());
+        sparse_set.remove(5);
+        sparse_set.add(2, "Chronos".to_string());
 
         assert_eq!(sparse_set.dense.len(), 3);
         assert_eq!(sparse_set.entities.len(), 3);
@@ -201,5 +260,36 @@ mod tests {
         assert_eq!(sparse_set.get_component(0).unwrap(), "Hello");
         assert_eq!(sparse_set.get_component(7).unwrap(), "Engine");
         assert_eq!(sparse_set.get_component(2).unwrap(), "Chronos");
+    }
+
+    #[test]
+    fn test_sparse_set_resize() {
+        let mut sparse_set: SparseSet<String> = SparseSet::new(2);
+        sparse_set.resize(5);
+        assert_eq!(sparse_set.get_sparse_array_size(), 5);
+
+        sparse_set.add(3, "Resize".to_string());
+        assert_eq!(sparse_set.get_component(3).unwrap(), "Resize");
+    }
+
+    #[test]
+    fn test_component_storage_resize() {
+        let mut storage = ComponentStorage::new(2);
+        storage.add_component(0, "First".to_string());
+        storage.add_component(1, "Second".to_string());
+
+        assert_eq!(storage.initial_capacity, 2);
+
+        storage.add_component(3, "Third".to_string());
+        assert_eq!(storage.initial_capacity, 4);
+    }
+
+    #[test]
+    fn test_component_storage_has_component() {
+        let mut storage = ComponentStorage::new(2);
+        storage.add_component(0, "First".to_string());
+
+        assert!(storage.has_component::<String>(0));
+        assert!(!storage.has_component::<String>(1));
     }
 }
