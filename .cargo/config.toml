@@ -1,0 +1,3 @@
+[alias]
+clippy-run = "clippy --all -- -W clippy::pedantic"
+demo = "run --release --bin sandbox"
