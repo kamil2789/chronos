@@ -1,11 +1,11 @@
-name: Build and Test
+name: Rust CI
 
 on:
   pull_request:
     branches: [ main ]
 
 jobs:
-  build-and-test:
+  rust-ci:
     runs-on: ubuntu-latest
 
     steps:
@@ -19,7 +19,7 @@ jobs:
       run: cargo build --verbose
 
     - name: Run Clippy (pedantic)
-      run: cargo clippy --all -- -W clippy::pedantic
+      run: cargo clippy --workspace -- -W clippy::pedantic
 
     - name: Run tests
       run: cargo test --verbose
