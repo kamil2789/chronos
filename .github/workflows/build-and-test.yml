@@ -1,0 +1,29 @@
+name: Build and Test
+
+on:
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Install Rust toolchain
+      uses: actions-rs/toolchain@v1
+      with:
+        toolchain: stable
+        profile: minimal
+        override: true
+
+    - name: Build project
+      run: cargo build --verbose
+
+    - name: Run Clippy (pedantic)
+      run: cargo clippy --all -- -W clippy::pedantic
+
+    - name: Run tests
+      run: cargo test --verbose
