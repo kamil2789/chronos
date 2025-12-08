@@ -1,0 +1,25 @@
+name: Rust CI
+
+on:
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  rust-ci:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Install Rust toolchain
+      uses: dtolnay/rust-toolchain@stable
+
+    - name: Build project
+      run: cargo build --verbose
+
+    - name: Run Clippy (pedantic)
+      run: cargo clippy --workspace -- -W clippy::pedantic
+
+    - name: Run tests
+      run: cargo test --verbose
