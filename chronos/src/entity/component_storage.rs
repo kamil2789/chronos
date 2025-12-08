@@ -38,7 +38,7 @@ impl ComponentStorage {
     pub fn new(initial_capacity: usize) -> Self {
         Self {
             storages: HashMap::new(),
-            initial_capacity: initial_capacity,
+            initial_capacity,
         }
     }
 
@@ -170,11 +170,10 @@ impl<T> SparseSet<T> {
     }
 
     pub fn get_component(&self, entity_id: usize) -> Option<&T> {
-        if entity_id < self.sparse.len() {
-            if let Some(entity_index) = self.sparse[entity_id] {
+        if entity_id < self.sparse.len()
+            && let Some(entity_index) = self.sparse[entity_id] {
                 return self.dense.get(entity_index);
             }
-        }
         None
     }
 
@@ -183,11 +182,10 @@ impl<T> SparseSet<T> {
     }
 
     fn get_component_dense_index(&self, entity_id: usize) -> Option<usize> {
-        if let Some(dense_index_opt) = self.sparse.get(entity_id) {
-            if let Some(dense_index) = dense_index_opt {
+        if let Some(dense_index_opt) = self.sparse.get(entity_id)
+            && let Some(dense_index) = dense_index_opt {
                 return Some(*dense_index);
             }
-        }
         None
     }
 }

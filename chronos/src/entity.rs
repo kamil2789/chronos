@@ -1,5 +1,5 @@
 mod component_storage;
-use crate::entity::{self, component_storage::ComponentStorage};
+use crate::entity::component_storage::ComponentStorage;
 
 pub trait ComponentBundle {
     fn add_to_entity(self, entity_id: usize, storage: &mut ComponentStorage);
