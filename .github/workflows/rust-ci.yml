@@ -15,11 +15,14 @@ jobs:
     - name: Install Rust toolchain
       uses: dtolnay/rust-toolchain@stable
 
-    - name: Build project
-      run: cargo build --verbose
+    - name: Check formatting
+      run: cargo fmt --all -- --check
 
     - name: Run Clippy (pedantic)
       run: cargo clippy --workspace -- -W clippy::pedantic
+
+    - name: Build project
+      run: cargo build --verbose
 
     - name: Run tests
       run: cargo test --verbose

@@ -171,9 +171,10 @@ impl<T> SparseSet<T> {
 
     pub fn get_component(&self, entity_id: usize) -> Option<&T> {
         if entity_id < self.sparse.len()
-            && let Some(entity_index) = self.sparse[entity_id] {
-                return self.dense.get(entity_index);
-            }
+            && let Some(entity_index) = self.sparse[entity_id]
+        {
+            return self.dense.get(entity_index);
+        }
         None
     }
 
@@ -183,9 +184,10 @@ impl<T> SparseSet<T> {
 
     fn get_component_dense_index(&self, entity_id: usize) -> Option<usize> {
         if let Some(dense_index_opt) = self.sparse.get(entity_id)
-            && let Some(dense_index) = dense_index_opt {
-                return Some(*dense_index);
-            }
+            && let Some(dense_index) = dense_index_opt
+        {
+            return Some(*dense_index);
+        }
         None
     }
 }
