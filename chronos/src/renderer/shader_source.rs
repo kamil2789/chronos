@@ -52,7 +52,7 @@ impl ShaderSourceManager {
 
 /// # Errors
 ///
-/// Will return `Err` if file could not be opened or data in the file is corrupted.
+/// Will return `Err` if the file could not be opened (I/O error) or if the file contains invalid UTF-8 encoding.
 pub fn read_src_from_file(path: &Path) -> Result<String> {
     std::fs::read_to_string(path)
         .map_err(|_| Error::ShaderSourceFileError(path.display().to_string()))
@@ -118,19 +118,19 @@ mod tests {
         create_file(fragment_src, fragment_file);
 
         let shader =
-            ShaderSource::new_from_file(Path::new("/nonExistedPath"), Path::new(fragment_file));
+            ShaderSource::new_from_file(Path::new("/nonExistentPath"), Path::new(fragment_file));
         assert!(shader.is_err());
 
         if let Err(error) = shader {
             assert!(
                 error
                     .to_string()
-                    .contains("File could not be opened, path: /nonExistedPath")
+                    .contains("File could not be opened, path: /nonExistentPath")
             );
         }
 
         let shader =
-            ShaderSource::new_from_file(Path::new(vertex_file), Path::new("/nonExistedPath"));
+            ShaderSource::new_from_file(Path::new(vertex_file), Path::new("/nonExistentPath"));
         assert!(shader.is_err());
 
         assert!(fs::remove_file(vertex_file).is_ok());
