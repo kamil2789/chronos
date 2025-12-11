@@ -73,13 +73,10 @@ fn delete_shader(gl: &glow::Context, shader: glow::Shader) {
 #[cfg(test)]
 mod tests {
     use super::compile;
-    use winit::event_loop::EventLoop;
-    use crate::renderer::opengl::init_opengl;
-
-    #[cfg(windows)]
-    use winit::platform::windows::EventLoopBuilderExtWindows;
-
-    use winit::window::Window; // tylko dla `Window::default_attributes()`
+    use crate::{
+        renderer::opengl::init_opengl,
+        window::{ChronosWindow, WindowConfig, WindowMode},
+    };
 
     const VERTEX_SHADER_SRC: &str = r#"
         #version 330 core
@@ -99,31 +96,17 @@ mod tests {
 
     #[test]
     fn test_compile_shader_no_error() {
-        // 1) EventLoop; na Windows pozwól na inny wątek
-        #[cfg(windows)]
-        let event_loop = winit::event_loop::EventLoop::builder()
-            .with_any_thread(true)
-            .build()
-            .unwrap();
+        let mut window = ChronosWindow::new(WindowConfig {
+            window_mode: WindowMode::Test,
+            ..Default::default()
+        });
 
-        #[cfg(not(windows))]
-        let event_loop = winit::event_loop::EventLoop::new().unwrap();
+        window.run().unwrap();
 
-        // 2) Atrybuty okna (niewidoczne)
-        let window_attrs = Window::default_attributes().with_visible(false);
-
-        // 3) Utworzenie okna bez run_app
-        let window = event_loop.create_window(window_attrs).unwrap();
-
-        // 4) Inicjalizacja GL
         let opengl = init_opengl(&window);
 
-        // 5) Kompilacja shadera
-        let res = crate::renderer::opengl::shader_compiler::compile(
-            &opengl.gl,
-            VERTEX_SHADER_SRC,
-            FRAGMENT_SHADER_SRC,
-        );
+        let res = compile(&opengl.gl, VERTEX_SHADER_SRC, FRAGMENT_SHADER_SRC);
+
         assert!(res.is_ok());
     }
 }

@@ -6,7 +6,10 @@ use glutin::{
 };
 use raw_window_handle::{HasDisplayHandle, HasWindowHandle};
 
-use crate::renderer::{Renderer, Result, ShaderId, shader_source::ShaderSource};
+use crate::{
+    renderer::{Renderer, Result, ShaderId, shader_source::ShaderSource},
+    window::ChronosWindow,
+};
 
 use glow::HasContext;
 use std::num::NonZeroU32;
@@ -17,10 +20,8 @@ pub struct OpenGL {
     pub surface: glutin::surface::Surface<glutin::surface::WindowSurface>,
 }
 
-pub fn init_opengl(window: &winit::window::Window) -> OpenGL {
-    //
-    // 1. Pobieramy raw handles do okna i display
-    //
+pub fn init_opengl(window: &ChronosWindow) -> OpenGL {
+    let window = window.get_window().unwrap();
     let raw_window = window.window_handle().unwrap().as_raw();
     let raw_display = window.display_handle().unwrap().as_raw();
 
@@ -37,7 +38,8 @@ pub fn init_opengl(window: &winit::window::Window) -> OpenGL {
         glutin::display::Display::new(
             raw_display,
             glutin::display::DisplayApiPreference::Wgl(Some(raw_window)),
-        ).expect("Failed to create WGL display")
+        )
+        .expect("Failed to create WGL display")
     };
 
     let config = unsafe {
@@ -98,7 +100,7 @@ pub fn init_opengl(window: &winit::window::Window) -> OpenGL {
     // 7. Test że GL działa
     //
     unsafe {
-        gl.clear_color(0.1, 0.2, 0.3, 1.0);
+        gl.clear_color(1.0, 0.1, 0.3, 1.0);
         gl.clear(glow::COLOR_BUFFER_BIT);
     }
     surface.swap_buffers(&gl_context).unwrap();

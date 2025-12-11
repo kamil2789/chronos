@@ -27,7 +27,7 @@ pub trait Renderer {
 
 pub fn init_render(window: &ChronosWindow, renderer_type: RendererType) -> Box<dyn Renderer> {
     match renderer_type {
-        RendererType::OpenGL => Box::new(opengl::init_opengl(&window.get_window().unwrap())),
+        RendererType::OpenGL => Box::new(opengl::init_opengl(&window)),
         RendererType::Vulkan => unimplemented!("Vulkan renderer is not implemented yet"),
     }
 }
