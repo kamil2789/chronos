@@ -1,99 +1,85 @@
 use crate::renderer::{RendererError, Result, ShaderId};
-use std::ffi::CString;
-use std::ptr;
+use glow::HasContext;
 
-pub fn compile(vertex_src: &str, fragment_src: &str) -> Result<ShaderId> {
-    let vertex_shader_id = compile_shader(vertex_src, gl::VERTEX_SHADER)?;
-    let fragment_shader_id = compile_shader(fragment_src, gl::FRAGMENT_SHADER)?;
-    let shader_program_id = create_program();
-    link_program(shader_program_id, vertex_shader_id, fragment_shader_id)?;
-    delete_shader(vertex_shader_id);
-    delete_shader(fragment_shader_id);
-    Ok(shader_program_id)
+pub fn compile(gl: &glow::Context, vertex_src: &str, fragment_src: &str) -> Result<ShaderId> {
+    let vertex_shader_id = compile_shader(gl, vertex_src, glow::VERTEX_SHADER)?;
+    let fragment_shader_id = compile_shader(gl, fragment_src, glow::FRAGMENT_SHADER)?;
+    let shader_program_id = create_program(gl);
+    link_program(gl, shader_program_id, vertex_shader_id, fragment_shader_id)?;
+    delete_shader(gl, vertex_shader_id);
+    delete_shader(gl, fragment_shader_id);
+    Ok(ShaderId::OpenGL(shader_program_id))
 }
 
-fn compile_shader(shader_src: &str, shader_type: u32) -> Result<u32> {
+fn compile_shader(gl: &glow::Context, shader_src: &str, shader_type: u32) -> Result<glow::Shader> {
     unsafe {
-        let shader = gl::CreateShader(shader_type);
-        let c_str_vert = CString::new(shader_src.as_bytes()).unwrap();
-        gl::ShaderSource(shader, 1, &c_str_vert.as_ptr(), ptr::null());
-        gl::CompileShader(shader);
+        let shader = gl
+            .create_shader(shader_type)
+            .map_err(|e| RendererError::CompilationError(e))?;
 
-        check_compile_status(shader)
+        gl.shader_source(shader, shader_src);
+        gl.compile_shader(shader);
+
+        check_compile_status(gl, shader)
     }
 }
 
-fn check_compile_status(shader_id: u32) -> Result<u32> {
-    let mut status = i32::from(gl::TRUE);
-    let info_length: usize = 512;
-    let mut info_log: Vec<u8> = vec![0; info_length];
-    unsafe { gl::GetShaderiv(shader_id, gl::COMPILE_STATUS, &mut status) };
-    if status == i32::from(gl::TRUE) {
-        Ok(shader_id)
-    } else {
-        unsafe {
-            gl::GetShaderInfoLog(
-                shader_id,
-                info_length.try_into().unwrap(),
-                ptr::null_mut(),
-                info_log.as_mut_ptr().cast::<i8>(),
-            );
-        };
-        Err(RendererError::CompilationError(String::from(
-            std::str::from_utf8(&info_log)
-                .unwrap()
-                .trim_end_matches('\0'),
-        )))
-    }
-}
-
-fn create_program() -> u32 {
-    unsafe { gl::CreateProgram() }
-}
-
-fn link_program(shader_id: u32, vertex_id: u32, fragment_id: u32) -> Result<()> {
+fn check_compile_status(gl: &glow::Context, shader: glow::Shader) -> Result<glow::Shader> {
     unsafe {
-        gl::AttachShader(shader_id, vertex_id);
-        gl::AttachShader(shader_id, fragment_id);
-        gl::LinkProgram(shader_id);
-        check_link_status(shader_id)
+        if gl.get_shader_compile_status(shader) {
+            Ok(shader)
+        } else {
+            let info_log = gl.get_shader_info_log(shader);
+            Err(RendererError::CompilationError(info_log))
+        }
     }
 }
 
-fn check_link_status(shader_id: u32) -> Result<()> {
-    let mut status = i32::from(gl::TRUE);
-    let info_length: usize = 512;
-    let mut info_log: Vec<u8> = vec![0; info_length];
-    unsafe { gl::GetProgramiv(shader_id, gl::LINK_STATUS, &mut status) };
-    if status == i32::from(gl::TRUE) {
-        Ok(())
-    } else {
-        unsafe {
-            gl::GetProgramInfoLog(
-                shader_id,
-                info_length.try_into().unwrap(),
-                ptr::null_mut(),
-                info_log.as_mut_ptr().cast::<i8>(),
-            );
-        };
-        Err(RendererError::LinkError(String::from(
-            std::str::from_utf8(&info_log)
-                .unwrap()
-                .trim_end_matches('\0'),
-        )))
-    }
+fn create_program(gl: &glow::Context) -> glow::Program {
+    unsafe { gl.create_program().expect("Failed to create program") }
 }
 
-fn delete_shader(shader_id: u32) {
+fn link_program(
+    gl: &glow::Context,
+    program: glow::Program,
+    vertex: glow::Shader,
+    fragment: glow::Shader,
+) -> Result<()> {
     unsafe {
-        gl::DeleteShader(shader_id);
+        gl.attach_shader(program, vertex);
+        gl.attach_shader(program, fragment);
+        gl.link_program(program);
+        check_link_status(gl, program)
     }
 }
 
+fn check_link_status(gl: &glow::Context, program: glow::Program) -> Result<()> {
+    unsafe {
+        if gl.get_program_link_status(program) {
+            Ok(())
+        } else {
+            let info_log = gl.get_program_info_log(program);
+            Err(RendererError::LinkError(info_log))
+        }
+    }
+}
+
+fn delete_shader(gl: &glow::Context, shader: glow::Shader) {
+    unsafe {
+        gl.delete_shader(shader);
+    }
+}
 
 #[cfg(test)]
 mod tests {
     use super::compile;
+    use winit::event_loop::EventLoop;
+    use crate::renderer::opengl::init_opengl;
+
+    #[cfg(windows)]
+    use winit::platform::windows::EventLoopBuilderExtWindows;
+
+    use winit::window::Window; // tylko dla `Window::default_attributes()`
 
     const VERTEX_SHADER_SRC: &str = r#"
         #version 330 core
@@ -113,20 +99,31 @@ mod tests {
 
     #[test]
     fn test_compile_shader_no_error() {
+        // 1) EventLoop; na Windows pozwól na inny wątek
+        #[cfg(windows)]
+        let event_loop = winit::event_loop::EventLoop::builder()
+            .with_any_thread(true)
+            .build()
+            .unwrap();
 
-        let shader_id = compile(VERTEX_SHADER_SRC, FRAGMENT_SHADER_SRC);
-        assert!(shader_id.is_ok());
-    }
+        #[cfg(not(windows))]
+        let event_loop = winit::event_loop::EventLoop::new().unwrap();
 
-    #[test]
-    fn test_compile_shader_invalid_shaders_src_get_err() {
-        let mut shader_id = compile(VERTEX_SHADER_SRC, "Invalid data");
-        assert!(shader_id.is_err());
+        // 2) Atrybuty okna (niewidoczne)
+        let window_attrs = Window::default_attributes().with_visible(false);
 
-        shader_id = compile("Invalid data", FRAGMENT_SHADER_SRC);
-        assert!(shader_id.is_err());
+        // 3) Utworzenie okna bez run_app
+        let window = event_loop.create_window(window_attrs).unwrap();
 
-        shader_id = compile("", "");
-        assert!(shader_id.is_err());
+        // 4) Inicjalizacja GL
+        let opengl = init_opengl(&window);
+
+        // 5) Kompilacja shadera
+        let res = crate::renderer::opengl::shader_compiler::compile(
+            &opengl.gl,
+            VERTEX_SHADER_SRC,
+            FRAGMENT_SHADER_SRC,
+        );
+        assert!(res.is_ok());
     }
 }

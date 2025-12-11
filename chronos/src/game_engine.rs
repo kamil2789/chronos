@@ -1,6 +1,5 @@
-use crate::renderer::opengl::OpenGL;
 use crate::renderer::shader_source::{ShaderManager, ShaderSource};
-use crate::renderer::{Renderer, RendererError};
+use crate::renderer::{Renderer, RendererError, init_render};
 use crate::window::{ChronosWindow, WinError, WindowConfig};
 
 pub type Result<T> = std::result::Result<T, EngineError>;
@@ -13,7 +12,13 @@ pub enum EngineError {
     RendererError(#[from] RendererError),
 }
 
+pub enum RendererType {
+    OpenGL,
+    Vulkan,
+}
+
 pub struct ChronosEngine {
+    #[allow(dead_code)]
     window: ChronosWindow,
     renderer: Box<dyn Renderer>,
     shader_manager: ShaderManager,
@@ -21,22 +26,16 @@ pub struct ChronosEngine {
 
 impl ChronosEngine {
     #[must_use]
-    pub fn new(window_config: WindowConfig, renderer: Box<dyn Renderer>) -> Self {
-        Self {
-            window: ChronosWindow::new(window_config),
-            renderer: renderer,
+    pub fn start(window_config: WindowConfig, renderer_type: RendererType) -> Result<Self> {
+        let mut window = ChronosWindow::new(window_config);
+        window.run()?;
+        let renderer = init_render(&window, renderer_type);
+        let engine = ChronosEngine {
+            window,
+            renderer,
             shader_manager: ShaderManager::default(),
-        }
-    }
-
-    /// Runs the game engine's main loop.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if the window fails to run or encounters a runtime error.
-    pub fn run(&mut self) -> Result<()> {
-        self.window.run()?;
-        Ok(())
+        };
+        Ok(engine)
     }
 
     pub fn load_shader(&mut self, name: &str, shader_source: &ShaderSource) -> Result<()> {
@@ -44,15 +43,5 @@ impl ChronosEngine {
             .register_from_source(name, shader_source);
         self.renderer.compile_shader(shader_source)?;
         Ok(())
-    }
-}
-
-impl Default for ChronosEngine {
-    fn default() -> Self {
-        Self {
-            window: ChronosWindow::new(WindowConfig::default()),
-            renderer: Box::new(OpenGL::default()),
-            shader_manager: ShaderManager::default(),
-        }
     }
 }

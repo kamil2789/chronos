@@ -3,6 +3,7 @@ use winit::dpi::LogicalSize;
 use winit::error::EventLoopError;
 use winit::event::WindowEvent;
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
+use winit::platform::windows::EventLoopBuilderExtWindows;
 use winit::window::{Window, WindowId};
 
 pub type Result<T> = std::result::Result<T, WinError>;
@@ -22,6 +23,7 @@ pub struct WindowConfig {
     pub resolution: Resolution,
     pub title: String,
     pub resizable: bool,
+    pub visibility: bool,
 }
 
 pub struct ChronosWindow {
@@ -38,6 +40,7 @@ impl Default for WindowConfig {
             },
             title: "Chronos Engine".to_string(),
             resizable: true,
+            visibility: true,
         }
     }
 }
@@ -62,6 +65,11 @@ impl ChronosWindow {
 
         event_loop.run_app(self)?;
         Ok(())
+    }
+
+    #[must_use]
+    pub fn get_window(&self) -> Option<&Window> {
+        self.window.as_ref()
     }
 }
 
