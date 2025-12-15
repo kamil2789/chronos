@@ -1,115 +1,40 @@
+mod init;
 mod shader_compiler;
 
+use glow::Context;
 use glutin::{
-    prelude::{GlDisplay, NotCurrentGlContext},
-    surface::GlSurface,
+    context::PossiblyCurrentContext,
+    surface::{self, Surface},
 };
-use raw_window_handle::{HasDisplayHandle, HasWindowHandle};
 
 use crate::{
     renderer::{Renderer, Result, ShaderId, shader_source::ShaderSource},
     window::ChronosWindow,
 };
 
-use glow::HasContext;
-use std::num::NonZeroU32;
-
+#[allow(dead_code)]
 pub struct OpenGL {
-    pub gl: glow::Context,
-    pub gl_context: glutin::context::PossiblyCurrentContext,
-    pub surface: glutin::surface::Surface<glutin::surface::WindowSurface>,
+    pub gl: Context,
+    pub gl_context: PossiblyCurrentContext,
+    pub surface: Surface<surface::WindowSurface>,
 }
 
-pub fn init_opengl(window: &ChronosWindow) -> OpenGL {
-    let window = window.get_window().unwrap();
-    let raw_window = window.window_handle().unwrap().as_raw();
-    let raw_display = window.display_handle().unwrap().as_raw();
+pub fn init_opengl(window: &ChronosWindow) -> Result<OpenGL> {
+    let handles = init::create_raw_handles(window)?;
+    let display = init::create_display(&handles)?;
+    let framebuffer_config = init::create_framebuffer_config(&display)?;
+    let surface_attributes = init::create_surface_attributes(window, &handles)?;
+    let context = init::create_context(&handles, &display, &framebuffer_config)?;
 
-    //
-    // 2. Tworzymy konfigurację kontekstu OpenGL
-    //
-    let template = glutin::config::ConfigTemplateBuilder::new()
-        .with_alpha_size(8)
-        .with_depth_size(24)
-        .with_stencil_size(8)
-        .build();
+    let surface = init::create_surface(&framebuffer_config, &surface_attributes, &display)?;
+    let gl_context = init::make_context_current(context, &surface)?;
+    let gl = init::load_gl_functions(&display);
 
-    let display = unsafe {
-        glutin::display::Display::new(
-            raw_display,
-            glutin::display::DisplayApiPreference::Wgl(Some(raw_window)),
-        )
-        .expect("Failed to create WGL display")
-    };
-
-    let config = unsafe {
-        display
-            .find_configs(template)
-            .unwrap()
-            .next()
-            .expect("No GL configs found")
-    };
-
-    //
-    // 3. Tworzymy atrybuty kontekstu (OpenGL Core)
-    //
-    let context_attributes = glutin::context::ContextAttributesBuilder::new()
-        .with_context_api(glutin::context::ContextApi::OpenGl(None))
-        .build(Some(raw_window));
-
-    let not_current_context = unsafe {
-        display
-            .create_context(&config, &context_attributes)
-            .expect("Failed to create OpenGL context")
-    };
-
-    //
-    // 4. Tworzymy surface powiązany z oknem
-    //
-    let size = window.inner_size();
-    let attrs = glutin::surface::SurfaceAttributesBuilder::<glutin::surface::WindowSurface>::new()
-        .build(
-            raw_window,
-            NonZeroU32::new(size.width).unwrap(),
-            NonZeroU32::new(size.height).unwrap(),
-        );
-
-    let surface = unsafe {
-        display
-            .create_window_surface(&config, &attrs)
-            .expect("Failed to create GL surface")
-    };
-
-    //
-    // 5. Ustawiamy kontekst jako aktywny (current)
-    //
-    let gl_context = not_current_context
-        .make_current(&surface)
-        .expect("Failed to make GL context current");
-
-    //
-    // 6. Loader glow
-    //
-    let gl = unsafe {
-        glow::Context::from_loader_function(|symbol| {
-            display.get_proc_address(&std::ffi::CString::new(symbol).unwrap()) as *const _
-        })
-    };
-
-    //
-    // 7. Test że GL działa
-    //
-    unsafe {
-        gl.clear_color(1.0, 0.1, 0.3, 1.0);
-        gl.clear(glow::COLOR_BUFFER_BIT);
-    }
-    surface.swap_buffers(&gl_context).unwrap();
-
-    OpenGL {
+    Ok(OpenGL {
         gl,
         gl_context,
         surface,
-    }
+    })
 }
 
 impl Renderer for OpenGL {
@@ -121,3 +46,6 @@ impl Renderer for OpenGL {
         )
     }
 }
+
+unsafe impl Sync for OpenGL {}
+unsafe impl Send for OpenGL {}

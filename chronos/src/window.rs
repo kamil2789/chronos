@@ -1,5 +1,5 @@
 use winit::application::ApplicationHandler;
-use winit::dpi::LogicalSize;
+use winit::dpi::{LogicalSize, PhysicalSize};
 use winit::error::EventLoopError;
 use winit::event::WindowEvent;
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
@@ -82,6 +82,11 @@ impl ChronosWindow {
         self.window.as_ref()
     }
 
+    #[must_use]
+    pub fn get_inner_size(&self) -> Option<PhysicalSize<u32>> {
+        self.window.as_ref().map(Window::inner_size)
+    }
+
     fn run_normal_mode(&mut self) -> Result<()> {
         let event_loop = EventLoop::new()?;
         event_loop.set_control_flow(ControlFlow::Poll);
@@ -92,13 +97,13 @@ impl ChronosWindow {
 
     #[allow(deprecated)]
     fn run_test_mode(&mut self) -> Result<()> {
-        let event_loop = self.build_test_event_loop()?;
+        let event_loop = ChronosWindow::build_test_event_loop()?;
         let window_attrs = Window::default_attributes().with_visible(false);
         self.window = Some(event_loop.create_window(window_attrs)?);
         Ok(())
     }
 
-    fn build_test_event_loop(&self) -> Result<EventLoop<()>> {
+    fn build_test_event_loop() -> Result<EventLoop<()>> {
         #[cfg(windows)]
         {
             let event_loop = winit::event_loop::EventLoop::builder()

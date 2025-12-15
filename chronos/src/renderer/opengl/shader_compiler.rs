@@ -15,7 +15,7 @@ fn compile_shader(gl: &glow::Context, shader_src: &str, shader_type: u32) -> Res
     unsafe {
         let shader = gl
             .create_shader(shader_type)
-            .map_err(|e| RendererError::CompilationError(e))?;
+            .map_err(RendererError::Compilation)?;
 
         gl.shader_source(shader, shader_src);
         gl.compile_shader(shader);
@@ -30,7 +30,7 @@ fn check_compile_status(gl: &glow::Context, shader: glow::Shader) -> Result<glow
             Ok(shader)
         } else {
             let info_log = gl.get_shader_info_log(shader);
-            Err(RendererError::CompilationError(info_log))
+            Err(RendererError::Compilation(info_log))
         }
     }
 }
@@ -59,7 +59,7 @@ fn check_link_status(gl: &glow::Context, program: glow::Program) -> Result<()> {
             Ok(())
         } else {
             let info_log = gl.get_program_info_log(program);
-            Err(RendererError::LinkError(info_log))
+            Err(RendererError::Link(info_log))
         }
     }
 }
@@ -72,11 +72,10 @@ fn delete_shader(gl: &glow::Context, shader: glow::Shader) {
 
 #[cfg(test)]
 mod tests {
+    use serial_test::serial;
+
     use super::compile;
-    use crate::{
-        renderer::opengl::init_opengl,
-        window::{ChronosWindow, WindowConfig, WindowMode},
-    };
+    use crate::test_utils::get_opengl_api;
 
     const VERTEX_SHADER_SRC: &str = r#"
         #version 330 core
@@ -95,18 +94,27 @@ mod tests {
     "#;
 
     #[test]
+    #[serial]
     fn test_compile_shader_no_error() {
-        let mut window = ChronosWindow::new(WindowConfig {
-            window_mode: WindowMode::Test,
-            ..Default::default()
-        });
-
-        window.run().unwrap();
-
-        let opengl = init_opengl(&window);
+        let opengl = get_opengl_api();
 
         let res = compile(&opengl.gl, VERTEX_SHADER_SRC, FRAGMENT_SHADER_SRC);
 
         assert!(res.is_ok());
+    }
+
+    #[test]
+    #[serial]
+    #[ignore]
+    fn test_compile_shader_error() {
+        let opengl = get_opengl_api();
+
+        let res = compile(
+            &opengl.gl,
+            VERTEX_SHADER_SRC,
+            "Some bad fragment shader code",
+        );
+
+        assert!(res.is_err());
     }
 }
