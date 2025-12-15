@@ -3,7 +3,7 @@ use winit::dpi::{LogicalSize, PhysicalSize};
 use winit::error::EventLoopError;
 use winit::event::WindowEvent;
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
-use winit::platform::windows::EventLoopBuilderExtWindows;
+#[cfg(windows)]
 use winit::window::{Window, WindowId};
 
 pub type Result<T> = std::result::Result<T, WinError>;
@@ -103,20 +103,22 @@ impl ChronosWindow {
         Ok(())
     }
 
+    #[cfg(windows)]
     fn build_test_event_loop() -> Result<EventLoop<()>> {
-        #[cfg(windows)]
-        {
-            let event_loop = winit::event_loop::EventLoop::builder()
-                .with_any_thread(true)
-                .build()?;
-            Ok(event_loop)
-        }
+        use winit::platform::windows::EventLoopBuilderExtWindows;
+        let event_loop = winit::event_loop::EventLoop::builder()
+            .with_any_thread(true)
+            .build()?;
+        Ok(event_loop)
+    }
 
-        #[cfg(not(windows))]
-        {
-            let event_loop = winit::event_loop::EventLoop::new()?;
-            Ok(event_loop)
-        }
+    #[cfg(target_os = "linux")]
+    fn build_test_event_loop() -> Result<EventLoop<()>> {
+        use winit::platform::x11::EventLoopBuilderExtX11;
+        let event_loop = winit::event_loop::EventLoop::builder()
+            .with_any_thread(true)
+            .build()?;
+        Ok(event_loop)
     }
 }
 

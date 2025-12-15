@@ -44,11 +44,14 @@ pub fn create_raw_handles(window: &ChronosWindow) -> Result<RawHandles> {
 
 pub fn create_display(handles: &RawHandles) -> Result<Display> {
     let display = unsafe {
-        glutin::display::Display::new(
-            handles.display,
-            glutin::display::DisplayApiPreference::WglThenEgl(Some(handles.window)),
-        )
-        .map_err(|e| RendererError::Initialization(format!("Failed to create display: {e}")))?
+        #[cfg(windows)]
+        let preference = glutin::display::DisplayApiPreference::WglThenEgl(Some(handles.window));
+
+        #[cfg(not(windows))]
+        let preference = glutin::display::DisplayApiPreference::GlxThenEgl(Box::new(|_| {}));
+
+        glutin::display::Display::new(handles.display, preference)
+            .map_err(|e| RendererError::Initialization(format!("Failed to create display: {e}")))?
     };
     Ok(display)
 }

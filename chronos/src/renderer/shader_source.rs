@@ -87,7 +87,7 @@ mod tests {
         );
         assert_eq!(manager.len(), 1);
 
-        //same shader should be returned
+        // Same shader should be returned.
         let shader_src = ShaderSource::new(vertex_src, fragment_src);
         manager.register_from_source("basic", &shader_src);
         assert_eq!(

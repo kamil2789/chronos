@@ -18,11 +18,11 @@ jobs:
     - name: Check formatting
       run: cargo fmt --all -- --check
 
-    - name: Run Clippy (pedantic)
-      run: cargo clippy --workspace -- -W clippy::pedantic
-
     - name: Build project
       run: cargo build --verbose
+
+    - name: Run Clippy (pedantic)
+      run: cargo clippy --workspace -- -W clippy::pedantic
 
     - name: Install GL dependencies (for headless OpenGL)
       run: |

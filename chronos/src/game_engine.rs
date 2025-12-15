@@ -51,6 +51,7 @@ impl ChronosEngine {
         self.shader_manager
             .register_from_source(name, shader_source);
         self.renderer.compile_shader(shader_source)?;
+        // TODO: Store the compiled shader ID associated with the name.
         Ok(())
     }
 }
