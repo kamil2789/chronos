@@ -4,10 +4,14 @@ version = "0.1.0"
 edition = "2024"
 
 [dev-dependencies]
-approx = "0.5"
+approx = "0.5.1"
+serial_test = "3.2.0"
 
 [dependencies]
 winit = "0.30.12"
-thiserror = "2.0.3"
+thiserror = "2.0.17"
 glam = "0.30.9"
 ash = "0.38.0"
+glow = "0.16.0"
+glutin = "0.32.3"
+raw-window-handle = "0.6.2"

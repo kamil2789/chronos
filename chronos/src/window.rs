@@ -1,5 +1,5 @@
 use winit::application::ApplicationHandler;
-use winit::dpi::LogicalSize;
+use winit::dpi::{LogicalSize, PhysicalSize};
 use winit::error::EventLoopError;
 use winit::event::WindowEvent;
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
@@ -11,6 +11,8 @@ pub type Result<T> = std::result::Result<T, WinError>;
 pub enum WinError {
     #[error("Failed to initialize window: {0}")]
     InternalWinitError(#[from] EventLoopError),
+    #[error("Window creation error: {0}")]
+    WindowCreationError(#[from] winit::error::OsError),
 }
 
 pub struct Resolution {
@@ -18,10 +20,17 @@ pub struct Resolution {
     pub height: u32,
 }
 
+#[derive(PartialEq, Eq)]
+pub enum WindowMode {
+    Normal,
+    Test,
+}
+
 pub struct WindowConfig {
     pub resolution: Resolution,
     pub title: String,
     pub resizable: bool,
+    pub window_mode: WindowMode,
 }
 
 pub struct ChronosWindow {
@@ -38,6 +47,7 @@ impl Default for WindowConfig {
             },
             title: "Chronos Engine".to_string(),
             resizable: true,
+            window_mode: WindowMode::Normal,
         }
     }
 }
@@ -57,11 +67,57 @@ impl ChronosWindow {
     ///
     /// Returns an error if the event loop fails to initialize or run.
     pub fn run(&mut self) -> Result<()> {
+        if self.config.window_mode == WindowMode::Normal {
+            self.run_normal_mode()
+        } else if self.config.window_mode == WindowMode::Test {
+            self.run_test_mode()
+        } else {
+            Ok(())
+        }
+    }
+
+    #[must_use]
+    pub fn get_window(&self) -> Option<&Window> {
+        self.window.as_ref()
+    }
+
+    #[must_use]
+    pub fn get_inner_size(&self) -> Option<PhysicalSize<u32>> {
+        self.window.as_ref().map(Window::inner_size)
+    }
+
+    fn run_normal_mode(&mut self) -> Result<()> {
         let event_loop = EventLoop::new()?;
         event_loop.set_control_flow(ControlFlow::Poll);
 
         event_loop.run_app(self)?;
         Ok(())
+    }
+
+    #[allow(deprecated)]
+    fn run_test_mode(&mut self) -> Result<()> {
+        let event_loop = ChronosWindow::build_test_event_loop()?;
+        let window_attrs = Window::default_attributes().with_visible(false);
+        self.window = Some(event_loop.create_window(window_attrs)?);
+        Ok(())
+    }
+
+    #[cfg(windows)]
+    fn build_test_event_loop() -> Result<EventLoop<()>> {
+        use winit::platform::windows::EventLoopBuilderExtWindows;
+        let event_loop = winit::event_loop::EventLoop::builder()
+            .with_any_thread(true)
+            .build()?;
+        Ok(event_loop)
+    }
+
+    #[cfg(target_os = "linux")]
+    fn build_test_event_loop() -> Result<EventLoop<()>> {
+        use winit::platform::x11::EventLoopBuilderExtX11;
+        let event_loop = winit::event_loop::EventLoop::builder()
+            .with_any_thread(true)
+            .build()?;
+        Ok(event_loop)
     }
 }
 
