@@ -3,7 +3,6 @@ use winit::dpi::{LogicalSize, PhysicalSize};
 use winit::error::EventLoopError;
 use winit::event::WindowEvent;
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
-#[cfg(windows)]
 use winit::window::{Window, WindowId};
 
 pub type Result<T> = std::result::Result<T, WinError>;
