@@ -1,6 +1,5 @@
 use crate::{game_engine::RendererType, window::ChronosWindow};
 
-pub mod opengl;
 pub mod shader_source;
 
 pub type Result<T> = std::result::Result<T, RendererError>;
@@ -19,7 +18,6 @@ pub enum RendererError {
 
 #[allow(dead_code)]
 pub enum ShaderId {
-    OpenGL(glow::Program),
     Vulkan(u64),
 }
 
@@ -28,11 +26,11 @@ pub trait Renderer {
 }
 
 pub fn init_render(
-    window: &ChronosWindow,
+    _window: &ChronosWindow,
     renderer_type: &RendererType,
 ) -> Result<Box<dyn Renderer>> {
     match renderer_type {
-        RendererType::OpenGL => Ok(Box::new(opengl::init_opengl(window)?)),
+        RendererType::Wgpu => unimplemented!("Wgpu renderer is not implemented yet"),
         RendererType::Vulkan => unimplemented!("Vulkan renderer is not implemented yet"),
     }
 }
