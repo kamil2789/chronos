@@ -13,7 +13,7 @@ pub enum EngineError {
 }
 
 pub enum RendererType {
-    OpenGL,
+    Wgpu,
     Vulkan,
 }
 
