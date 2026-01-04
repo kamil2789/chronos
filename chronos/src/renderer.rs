@@ -1,6 +1,7 @@
 use crate::{game_engine::RendererType, window::ChronosWindow};
 
 pub mod shader_source;
+pub mod wgpu;
 
 pub type Result<T> = std::result::Result<T, RendererError>;
 
@@ -30,7 +31,7 @@ pub fn init_render(
     renderer_type: &RendererType,
 ) -> Result<Box<dyn Renderer>> {
     match renderer_type {
-        RendererType::Wgpu => unimplemented!("Wgpu renderer is not implemented yet"),
+        RendererType::Wgpu => Ok(Box::new(wgpu::Wgpu {})),
         RendererType::Vulkan => unimplemented!("Vulkan renderer is not implemented yet"),
     }
 }

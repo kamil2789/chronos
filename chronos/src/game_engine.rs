@@ -25,21 +25,28 @@ pub struct ChronosEngine {
 }
 
 impl ChronosEngine {
-    /// Starts the Chronos engine with the given window configuration and renderer type.
+    /// Creates a new instance of the `ChronosEngine` with the specified window configuration and renderer type.
     ///
     /// # Errors
     ///
-    /// Returns an error if window creation or renderer initialization fails.
-    pub fn start(window_config: WindowConfig, renderer_type: &RendererType) -> Result<Self> {
-        let mut window = ChronosWindow::new(window_config);
-        window.run()?;
+    /// Returns an error if the window cannot be created or if the renderer fails to initialize.
+    pub fn new(window_config: WindowConfig, renderer_type: &RendererType) -> Result<Self> {
+        let window = ChronosWindow::new(window_config);
         let renderer = init_render(&window, renderer_type)?;
-        let engine = ChronosEngine {
+        Ok(Self {
             window,
             renderer,
             shader_manager: ShaderManager::default(),
-        };
-        Ok(engine)
+        })
+    }
+    /// Starts the Chronos engine
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if window cannot run
+    pub fn start(&mut self) -> Result<()> {
+        self.window.run()?;
+        Ok(())
     }
 
     /// Loads a shader into the engine.
