@@ -2,7 +2,7 @@ use std::sync::Arc;
 use winit::window::Window;
 
 use crate::renderer::{Renderer, shader_source};
-use crate::renderer::{Result, ShaderId, RendererError};
+use crate::renderer::{RendererError, Result, ShaderId};
 
 pub struct WgpuRenderer {
     surface: wgpu::Surface<'static>,
@@ -23,9 +23,9 @@ impl WgpuRenderer {
         });
 
         // Surface - miejsce gdzie renderujemy (okno)
-        let surface = instance
-            .create_surface(window.clone())
-            .map_err(|e| RendererError::Initialization(format!("Failed to create surface: {}", e)))?;
+        let surface = instance.create_surface(window.clone()).map_err(|e| {
+            RendererError::Initialization(format!("Failed to create surface: {}", e))
+        })?;
 
         // Adapter - fizyczna karta graficzna
         let adapter = instance
@@ -39,18 +39,18 @@ impl WgpuRenderer {
 
         // Device + Queue - połączenie z GPU
         let (device, queue) = adapter
-            .request_device(
-                &wgpu::DeviceDescriptor {
-                    label: Some("Chronos Device"),
-                    required_features: wgpu::Features::empty(),
-                    experimental_features: wgpu::ExperimentalFeatures::disabled(),
-                    required_limits: wgpu::Limits::default(),
-                    memory_hints: Default::default(),
-                    trace: wgpu::Trace::Off,
-                },
-            )
+            .request_device(&wgpu::DeviceDescriptor {
+                label: Some("Chronos Device"),
+                required_features: wgpu::Features::empty(),
+                experimental_features: wgpu::ExperimentalFeatures::disabled(),
+                required_limits: wgpu::Limits::default(),
+                memory_hints: Default::default(),
+                trace: wgpu::Trace::Off,
+            })
             .await
-            .map_err(|e| RendererError::Initialization(format!("Failed to create device: {}", e)))?;
+            .map_err(|e| {
+                RendererError::Initialization(format!("Failed to create device: {}", e))
+            })?;
 
         let surface_caps = surface.get_capabilities(&adapter);
 
@@ -80,15 +80,6 @@ impl WgpuRenderer {
             config,
             is_surface_configured: false,
         })
-    }
-
-    pub fn resize(&mut self, width: u32, height: u32) {
-        if width > 0 && height > 0 {
-            self.config.width = width;
-            self.config.height = height;
-            self.surface.configure(&self.device, &self.config);
-            self.is_surface_configured = true;
-        }
     }
 
     pub fn render(&mut self) -> std::result::Result<(), wgpu::SurfaceError> {
@@ -141,5 +132,23 @@ impl WgpuRenderer {
 impl Renderer for WgpuRenderer {
     fn compile_shader(&mut self, _source: &shader_source::ShaderSource) -> Result<ShaderId> {
         unimplemented!("Wgpu shader compilation is not implemented yet");
+    }
+
+    fn render(&mut self) -> Result<()> {
+        self.render().map_err(|e| match e {
+            wgpu::SurfaceError::Lost | wgpu::SurfaceError::Outdated => {
+                RendererError::Surface("Surface lost or outdated - resize required".to_string())
+            }
+            _ => RendererError::Render(format!("Failed to render frame: {}", e)),
+        })
+    }
+
+    fn resize(&mut self, width: u32, height: u32) {
+        if width > 0 && height > 0 {
+            self.config.width = width;
+            self.config.height = height;
+            self.surface.configure(&self.device, &self.config);
+            self.is_surface_configured = true;
+        }
     }
 }

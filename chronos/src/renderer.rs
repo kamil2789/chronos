@@ -1,3 +1,9 @@
+use std::sync::Arc;
+
+use winit::window::Window;
+
+use crate::{game_engine::RendererType, renderer::wgpu::WgpuRenderer};
+
 pub mod shader_source;
 pub mod wgpu;
 
@@ -13,6 +19,10 @@ pub enum RendererError {
     Link(String),
     #[error("Renderer initialization error: {0}")]
     Initialization(String),
+    #[error("Render error: {0}")]
+    Render(String),
+    #[error("Surface error: {0}")]
+    Surface(String),
 }
 
 #[allow(dead_code)]
@@ -22,4 +32,22 @@ pub enum ShaderId {
 
 pub trait Renderer {
     fn compile_shader(&mut self, source: &shader_source::ShaderSource) -> Result<ShaderId>;
+    fn render(&mut self) -> Result<()>;
+    fn resize(&mut self, _width: u32, _height: u32);
+}
+
+pub fn init_render(window: Arc<Window>, renderer_type: &RendererType) -> Result<Box<dyn Renderer>> {
+    match renderer_type {
+        RendererType::Wgpu => {
+            let render = match pollster::block_on(WgpuRenderer::new(window)) {
+                Ok(renderer) => Box::new(renderer),
+                Err(_) => {
+                    return Err(RendererError::Initialization(
+                        "Failed to initialize WGPU renderer".to_string(),
+                    ));
+                }
+            };
+            Ok(render)
+        }
+    }
 }

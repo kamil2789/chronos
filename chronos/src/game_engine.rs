@@ -7,6 +7,7 @@ use winit::window::{Window, WindowId};
 
 use crate::renderer::shader_source::{ShaderManager, ShaderSource};
 use crate::renderer::wgpu::WgpuRenderer;
+use crate::renderer::{Renderer, RendererError, init_render};
 use crate::window::{ChronosWindow, WinError, WindowConfig};
 
 pub type Result<T> = std::result::Result<T, EngineError>;
@@ -19,27 +20,30 @@ pub enum EngineError {
     EventLoopError(#[from] winit::error::EventLoopError),
 }
 
+#[derive(Clone)]
+pub enum RendererType {
+    Wgpu,
+}
+
 pub struct ChronosEngine {
     window: ChronosWindow,
-    renderer: Option<WgpuRenderer>,
+    renderer: Option<Box<dyn Renderer>>,
+    renderer_type: RendererType,
     shader_manager: ShaderManager,
     frame_count: u64,
 }
 
 impl ChronosEngine {
     /// Creates a new instance of the `ChronosEngine` with the specified window configuration.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if initialization fails.
-    pub fn new(window_config: WindowConfig) -> Result<Self> {
+    pub fn new(window_config: WindowConfig, renderer_type: RendererType) -> Self {
         let window = ChronosWindow::new(window_config);
-        Ok(Self {
+        Self {
             window,
             renderer: None,
+            renderer_type,
             shader_manager: ShaderManager::default(),
             frame_count: 0,
-        })
+        }
     }
 
     /// Starts the Chronos engine
@@ -65,11 +69,17 @@ impl ChronosEngine {
         // TODO: Implement shader compilation when renderer is ready
         Ok(())
     }
+
+    fn renderer(&mut self) -> &mut Box<dyn Renderer> {
+        self.renderer
+            .as_mut()
+            .expect("Renderer not initialized - resumed() was not called")
+    }
 }
 
 impl ApplicationHandler for ChronosEngine {
+    // run after event_loop.run_app is called
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
-        // Tworzymy okno
         let window_attributes = Window::default_attributes()
             .with_title(&self.window.config.title)
             .with_inner_size(LogicalSize::new(
@@ -88,12 +98,10 @@ impl ApplicationHandler for ChronosEngine {
 
         self.window.window = Some(window.clone());
 
-        // Inicjalizujemy renderer (blokujemy na async)
-        match pollster::block_on(WgpuRenderer::new(window)) {
-            Ok(renderer) => {
-                self.renderer = Some(renderer);
-            }
-            Err(_) => {
+        match init_render(window, &self.renderer_type) {
+            Ok(renderer) => self.renderer = Some(renderer),
+            Err(e) => {
+                eprintln!("Failed to initialize renderer: {}", e);
                 event_loop.exit();
             }
         }
@@ -110,31 +118,27 @@ impl ApplicationHandler for ChronosEngine {
                 event_loop.exit();
             }
             WindowEvent::Resized(new_size) => {
-                if let Some(renderer) = &mut self.renderer {
-                    renderer.resize(new_size.width, new_size.height);
-                }
+                self.renderer().resize(new_size.width, new_size.height);
             }
             WindowEvent::RedrawRequested => {
                 self.frame_count += 1;
-                
+
                 // Wyświetl co 60 klatek
                 if self.frame_count % 60 == 0 {
                     println!("Frame: {}", self.frame_count);
                 }
-                
-                if let Some(renderer) = &mut self.renderer {
-                    match renderer.render() {
-                        Ok(_) => {}
-                        Err(wgpu::SurfaceError::Lost | wgpu::SurfaceError::Outdated) => {
-                            // Rekonfiguruj surface jeśli stracony
-                            if let Some(window) = &self.window.window {
-                                let size = window.inner_size();
-                                renderer.resize(size.width, size.height);
-                            }
+
+                match self.renderer().render() {
+                    Ok(_) => {}
+                    Err(RendererError::Surface(_)) => {
+                        // Surface stracony/przestarzały - rekonfiguruj
+                        if let Some(window) = &self.window.window {
+                            let size = window.inner_size();
+                            self.renderer().resize(size.width, size.height);
                         }
-                        Err(e) => {
-                            eprintln!("Render error: {:?}", e);
-                        }
+                    }
+                    Err(e) => {
+                        eprintln!("Render error: {:?}", e);
                     }
                 }
 

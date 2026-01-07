@@ -1,5 +1,7 @@
 use std::collections::HashMap;
 
+pub type ShaderName = String;
+
 #[derive(Debug, Clone, Default, PartialEq, Eq, Hash)]
 pub struct ShaderSource {
     vertex_shader: String,
@@ -8,7 +10,7 @@ pub struct ShaderSource {
 
 #[derive(Default)]
 pub struct ShaderManager {
-    shaders_src: HashMap<String, ShaderSource>,
+    shaders_src: HashMap<ShaderName, ShaderSource>,
 }
 
 impl ShaderManager {
