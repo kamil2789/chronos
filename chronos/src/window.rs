@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use winit::application::ApplicationHandler;
 use winit::dpi::{LogicalSize, PhysicalSize};
 use winit::error::EventLoopError;
@@ -34,7 +36,7 @@ pub struct WindowConfig {
 }
 
 pub struct ChronosWindow {
-    window: Option<Window>,
+    window: Option<Arc<Window>>,
     config: WindowConfig,
 }
 
@@ -77,13 +79,13 @@ impl ChronosWindow {
     }
 
     #[must_use]
-    pub fn get_window(&self) -> Option<&Window> {
-        self.window.as_ref()
+    pub fn get_window(&self) -> Option<Arc<Window>> {
+        self.window.as_ref().cloned()
     }
 
     #[must_use]
     pub fn get_inner_size(&self) -> Option<PhysicalSize<u32>> {
-        self.window.as_ref().map(Window::inner_size)
+        self.window.as_ref().map(|w| w.inner_size())
     }
 
     fn run_normal_mode(&mut self) -> Result<()> {
@@ -98,7 +100,7 @@ impl ChronosWindow {
     fn run_test_mode(&mut self) -> Result<()> {
         let event_loop = ChronosWindow::build_test_event_loop()?;
         let window_attrs = Window::default_attributes().with_visible(false);
-        self.window = Some(event_loop.create_window(window_attrs)?);
+        self.window = Some(Arc::new(event_loop.create_window(window_attrs)?));
         Ok(())
     }
 
@@ -132,7 +134,7 @@ impl ApplicationHandler for ChronosWindow {
             .with_resizable(self.config.resizable);
 
         if let Ok(window) = event_loop.create_window(window_attributes) {
-            self.window = Some(window);
+            self.window = Some(Arc::new(window));
         } else {
             event_loop.exit();
         }
