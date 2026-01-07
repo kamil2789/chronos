@@ -1,5 +1,3 @@
-use crate::{game_engine::RendererType, window::ChronosWindow};
-
 pub mod shader_source;
 pub mod wgpu;
 
@@ -24,14 +22,4 @@ pub enum ShaderId {
 
 pub trait Renderer {
     fn compile_shader(&mut self, source: &shader_source::ShaderSource) -> Result<ShaderId>;
-}
-
-pub fn init_render(
-    _window: &ChronosWindow,
-    renderer_type: &RendererType,
-) -> Result<Box<dyn Renderer>> {
-    match renderer_type {
-        RendererType::Wgpu => Ok(Box::new(wgpu::Wgpu {})),
-        RendererType::Vulkan => unimplemented!("Vulkan renderer is not implemented yet"),
-    }
 }
