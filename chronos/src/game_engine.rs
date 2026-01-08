@@ -1,3 +1,5 @@
+mod game_loop;
+
 use std::sync::Arc;
 use winit::application::ApplicationHandler;
 use winit::dpi::LogicalSize;
@@ -5,17 +7,17 @@ use winit::event::WindowEvent;
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
 use winit::window::{Window, WindowId};
 
+use crate::configs::EngineConfig;
+use crate::game_engine::game_loop::GameLoop;
 use crate::renderer::shader_source::{ShaderManager, ShaderSource};
-use crate::renderer::wgpu::WgpuRenderer;
-use crate::renderer::{Renderer, RendererError, init_render};
-use crate::window::{ChronosWindow, WinError, WindowConfig};
+use crate::renderer::{Renderer, init_render};
 
 pub type Result<T> = std::result::Result<T, EngineError>;
 
 #[derive(thiserror::Error, Debug)]
 pub enum EngineError {
     #[error("Window error: {0}")]
-    WindowError(#[from] WinError),
+    WindowError(String),
     #[error("Event loop error: {0}")]
     EventLoopError(#[from] winit::error::EventLoopError),
 }
@@ -26,23 +28,20 @@ pub enum RendererType {
 }
 
 pub struct ChronosEngine {
-    window: ChronosWindow,
+    window: Option<Arc<winit::window::Window>>,
     renderer: Option<Box<dyn Renderer>>,
-    renderer_type: RendererType,
     shader_manager: ShaderManager,
-    frame_count: u64,
+    config: EngineConfig,
 }
 
 impl ChronosEngine {
-    /// Creates a new instance of the `ChronosEngine` with the specified window configuration.
-    pub fn new(window_config: WindowConfig, renderer_type: RendererType) -> Self {
-        let window = ChronosWindow::new(window_config);
+    /// The main Chronos engine struct
+    pub fn new(config: EngineConfig) -> Self {
         Self {
-            window,
+            window: None,
             renderer: None,
-            renderer_type,
             shader_manager: ShaderManager::default(),
-            frame_count: 0,
+            config,
         }
     }
 
@@ -59,51 +58,69 @@ impl ChronosEngine {
     }
 
     /// Loads a shader into the engine.
-    ///
-    /// # Errors
-    ///
-    /// Returns an error if shader compilation fails or if the renderer encounters an error.
-    pub fn load_shader(&mut self, name: &str, shader_source: &ShaderSource) -> Result<()> {
+    pub fn load_shader(&mut self, name: &str, shader_source: &ShaderSource) {
         self.shader_manager
             .register_from_source(name, shader_source);
-        // TODO: Implement shader compilation when renderer is ready
-        Ok(())
     }
 
-    fn renderer(&mut self) -> &mut Box<dyn Renderer> {
-        self.renderer
-            .as_mut()
-            .expect("Renderer not initialized - resumed() was not called")
+    fn create_window(&mut self, event_loop: &ActiveEventLoop) -> Result<Arc<Window>> {
+        let window_attributes = Window::default_attributes()
+            .with_title(&self.config.window.title)
+            .with_inner_size(LogicalSize::new(
+                self.config.window.resolution.width,
+                self.config.window.resolution.height,
+            ))
+            .with_resizable(self.config.window.resizable);
+
+        let window = match event_loop.create_window(window_attributes) {
+            Ok(w) => Arc::new(w),
+            Err(e) => {
+                return Err(EngineError::WindowError(format!(
+                    "Window creation error: {}",
+                    e
+                )));
+            }
+        };
+
+        Ok(window)
+    }
+
+    fn on_redraw_requested(&mut self) {
+        if let Some(window) = &self.window {
+            if let Some(renderer) = &mut self.renderer {
+                GameLoop::main_frame(renderer.as_mut(), window);
+            }
+            window.request_redraw();
+        }
+    }
+
+    fn on_close_requested(&mut self, event_loop: &ActiveEventLoop) {
+        event_loop.exit();
+    }
+
+    fn on_resize_requested(&mut self, width: u32, height: u32) {
+        if let Some(renderer) = &mut self.renderer {
+            renderer.resize(width, height);
+        }
     }
 }
 
 impl ApplicationHandler for ChronosEngine {
     // run after event_loop.run_app is called
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
-        let window_attributes = Window::default_attributes()
-            .with_title(&self.window.config.title)
-            .with_inner_size(LogicalSize::new(
-                self.window.config.resolution.width,
-                self.window.config.resolution.height,
-            ))
-            .with_resizable(self.window.config.resizable);
-
-        let window = match event_loop.create_window(window_attributes) {
-            Ok(w) => Arc::new(w),
-            Err(_) => {
-                event_loop.exit();
-                return;
+        if let Ok(window) = self.create_window(event_loop) {
+            match init_render(window.clone(), &self.config.renderer_type) {
+                Ok(renderer) => self.renderer = Some(renderer),
+                Err(e) => {
+                    eprintln!("Failed to initialize renderer: {}", e);
+                    event_loop.exit();
+                }
             }
-        };
-
-        self.window.window = Some(window.clone());
-
-        match init_render(window, &self.renderer_type) {
-            Ok(renderer) => self.renderer = Some(renderer),
-            Err(e) => {
-                eprintln!("Failed to initialize renderer: {}", e);
-                event_loop.exit();
-            }
+            self.window = Some(window);
+        } else {
+            eprintln!("Failed to create window.");
+            event_loop.exit();
+            return;
         }
     }
 
@@ -115,37 +132,13 @@ impl ApplicationHandler for ChronosEngine {
     ) {
         match event {
             WindowEvent::CloseRequested => {
-                event_loop.exit();
+                self.on_close_requested(event_loop);
             }
             WindowEvent::Resized(new_size) => {
-                self.renderer().resize(new_size.width, new_size.height);
+                self.on_resize_requested(new_size.width, new_size.height);
             }
             WindowEvent::RedrawRequested => {
-                self.frame_count += 1;
-
-                // Wyświetl co 60 klatek
-                if self.frame_count % 60 == 0 {
-                    println!("Frame: {}", self.frame_count);
-                }
-
-                match self.renderer().render() {
-                    Ok(_) => {}
-                    Err(RendererError::Surface(_)) => {
-                        // Surface stracony/przestarzały - rekonfiguruj
-                        if let Some(window) = &self.window.window {
-                            let size = window.inner_size();
-                            self.renderer().resize(size.width, size.height);
-                        }
-                    }
-                    Err(e) => {
-                        eprintln!("Render error: {:?}", e);
-                    }
-                }
-
-                // Żądaj kolejnej klatki
-                if let Some(window) = &self.window.window {
-                    window.request_redraw();
-                }
+                self.on_redraw_requested();
             }
             _ => {}
         }
