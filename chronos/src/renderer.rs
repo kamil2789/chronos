@@ -11,12 +11,14 @@ pub type Result<T> = std::result::Result<T, RendererError>;
 
 #[derive(thiserror::Error, Debug)]
 pub enum RendererError {
+    /*
     #[error("File could not be opened, path: {0}")]
     ShaderSourceFile(String),
     #[error("Shader compilation error: {0}")]
     Compilation(String),
     #[error("Shader link error: {0}")]
     Link(String),
+    */
     #[error("Renderer initialization error: {0}")]
     Initialization(String),
     #[error("Render error: {0}")]
@@ -31,7 +33,7 @@ pub enum ShaderId {
 }
 
 pub trait Renderer {
-    fn compile_shader(&mut self, source: &shader_source::ShaderSource) -> Result<ShaderId>;
+    //fn compile_shader(&mut self, source: &shader_source::ShaderSource) -> Result<ShaderId>;
     fn render(&mut self) -> Result<()>;
     fn resize(&mut self, _width: u32, _height: u32);
 }

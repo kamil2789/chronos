@@ -36,6 +36,7 @@ pub struct ChronosEngine {
 
 impl ChronosEngine {
     /// The main Chronos engine struct
+    #[must_use]
     pub fn new(config: EngineConfig) -> Self {
         Self {
             window: None,
@@ -76,8 +77,7 @@ impl ChronosEngine {
             Ok(w) => Arc::new(w),
             Err(e) => {
                 return Err(EngineError::WindowError(format!(
-                    "Window creation error: {}",
-                    e
+                    "Window creation error: {e}"
                 )));
             }
         };
@@ -94,7 +94,7 @@ impl ChronosEngine {
         }
     }
 
-    fn on_close_requested(&mut self, event_loop: &ActiveEventLoop) {
+    fn on_close_requested(event_loop: &ActiveEventLoop) {
         event_loop.exit();
     }
 
@@ -112,7 +112,7 @@ impl ApplicationHandler for ChronosEngine {
             match init_render(window.clone(), &self.config.renderer_type) {
                 Ok(renderer) => self.renderer = Some(renderer),
                 Err(e) => {
-                    eprintln!("Failed to initialize renderer: {}", e);
+                    eprintln!("Failed to initialize renderer: {e}");
                     event_loop.exit();
                 }
             }
@@ -120,7 +120,6 @@ impl ApplicationHandler for ChronosEngine {
         } else {
             eprintln!("Failed to create window.");
             event_loop.exit();
-            return;
         }
     }
 
@@ -132,7 +131,7 @@ impl ApplicationHandler for ChronosEngine {
     ) {
         match event {
             WindowEvent::CloseRequested => {
-                self.on_close_requested(event_loop);
+                Self::on_close_requested(event_loop);
             }
             WindowEvent::Resized(new_size) => {
                 self.on_resize_requested(new_size.width, new_size.height);

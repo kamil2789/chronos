@@ -17,6 +17,7 @@ pub struct WindowConfig {
 }
 
 impl WindowConfig {
+    #[must_use]
     pub fn new(resolution: Resolution, title: &str, resizable: bool) -> Self {
         Self {
             resolution,
