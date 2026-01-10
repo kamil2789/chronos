@@ -7,6 +7,7 @@ use winit::event::WindowEvent;
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
 use winit::window::{Window, WindowId};
 
+use crate::components::color::RGBA;
 use crate::configs::EngineConfig;
 use crate::game_engine::game_loop::GameLoop;
 use crate::renderer::shader_source::{ShaderManager, ShaderSource};
@@ -62,6 +63,12 @@ impl ChronosEngine {
     pub fn load_shader(&mut self, name: &str, shader_source: &ShaderSource) {
         self.shader_manager
             .register_from_source(name, shader_source);
+    }
+
+    pub fn set_background_color(&mut self, color: &RGBA) {
+        if let Some(renderer) = &mut self.renderer {
+            renderer.set_background_color(color);
+        }
     }
 
     fn create_window(&mut self, event_loop: &ActiveEventLoop) -> Result<Arc<Window>> {

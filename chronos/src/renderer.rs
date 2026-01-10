@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use winit::window::Window;
 
-use crate::{game_engine::RendererType, renderer::wgpu::WgpuRenderer};
+use crate::{components::color::RGBA, game_engine::RendererType, renderer::wgpu::WgpuRenderer};
 
 pub mod shader_source;
 pub mod wgpu;
@@ -36,6 +36,7 @@ pub trait Renderer {
     //fn compile_shader(&mut self, source: &shader_source::ShaderSource) -> Result<ShaderId>;
     fn render(&mut self) -> Result<()>;
     fn resize(&mut self, _width: u32, _height: u32);
+    fn set_background_color(&mut self, color: &RGBA);
 }
 
 pub fn init_render(window: Arc<Window>, renderer_type: &RendererType) -> Result<Box<dyn Renderer>> {

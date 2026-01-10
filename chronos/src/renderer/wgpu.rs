@@ -3,6 +3,7 @@ use wgpu::MemoryHints;
 use winit::dpi::PhysicalSize;
 use winit::window::Window;
 
+use crate::components::color::RGBA;
 use crate::renderer::Renderer;
 use crate::renderer::{RendererError, Result};
 
@@ -11,6 +12,7 @@ pub struct WgpuRenderer {
     device: wgpu::Device,
     queue: wgpu::Queue,
     config: wgpu::SurfaceConfiguration,
+    background_color: RGBA,
 }
 
 impl WgpuRenderer {
@@ -30,6 +32,7 @@ impl WgpuRenderer {
             device,
             queue,
             config,
+            background_color: RGBA::default(),
         })
     }
 
@@ -53,12 +56,7 @@ impl WgpuRenderer {
                     view: &view,
                     resolve_target: None,
                     ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(wgpu::Color {
-                            r: 0.1,
-                            g: 0.2,
-                            b: 0.3,
-                            a: 1.0,
-                        }),
+                        load: wgpu::LoadOp::Clear(RGBA::from_hex(0xFF_00_00_FF).into()),
                         store: wgpu::StoreOp::Store,
                     },
                     depth_slice: None,
@@ -171,5 +169,9 @@ impl Renderer for WgpuRenderer {
             self.config.height = height;
             self.surface.configure(&self.device, &self.config);
         }
+    }
+
+    fn set_background_color(&mut self, color: &RGBA) {
+        self.background_color = color.clone();
     }
 }

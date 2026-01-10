@@ -4,6 +4,30 @@ pub struct RGBA {
     alpha: f32,
 }
 
+impl From<RGBA> for wgpu::Color {
+    fn from(color: RGBA) -> Self {
+        let (r, g, b, a) = color.get();
+        wgpu::Color {
+            r: f64::from(r) / 255.0,
+            g: f64::from(g) / 255.0,
+            b: f64::from(b) / 255.0,
+            a: f64::from(a),
+        }
+    }
+}
+
+impl From<&RGBA> for wgpu::Color {
+    fn from(color: &RGBA) -> Self {
+        let (r, g, b, a) = color.get();
+        wgpu::Color {
+            r: f64::from(r) / 255.0,
+            g: f64::from(g) / 255.0,
+            b: f64::from(b) / 255.0,
+            a: f64::from(a),
+        }
+    }
+}
+
 #[derive(Clone, PartialEq, Debug)]
 pub enum Color {
     Uniform(RGBA),
