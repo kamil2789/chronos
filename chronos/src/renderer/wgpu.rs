@@ -1,5 +1,6 @@
 use std::sync::Arc;
 use wgpu::MemoryHints;
+use wgpu::util::DeviceExt;
 use winit::dpi::PhysicalSize;
 use winit::window::Window;
 
@@ -13,6 +14,12 @@ pub struct WgpuRenderer {
     queue: wgpu::Queue,
     config: wgpu::SurfaceConfiguration,
     background_color: RGBA,
+    // Pipeline dla trójkąta z jednolitym kolorem
+    uniform_color_pipeline: wgpu::RenderPipeline,
+    uniform_color_vertex_buffer: wgpu::Buffer,
+    // Pipeline dla trójkąta z kolorami per wierzchołek
+    vertex_color_pipeline: wgpu::RenderPipeline,
+    vertex_color_vertex_buffer: wgpu::Buffer,
 }
 
 impl WgpuRenderer {
@@ -27,12 +34,22 @@ impl WgpuRenderer {
 
         surface.configure(&device, &config);
 
+        // Tworzenie pipeline'ów i buforów dla trójkątów
+        let (uniform_color_pipeline, uniform_color_vertex_buffer) = 
+            Self::create_uniform_color_triangle_pipeline(&device, &config);
+        let (vertex_color_pipeline, vertex_color_vertex_buffer) = 
+            Self::create_vertex_color_triangle_pipeline(&device, &config);
+
         Ok(Self {
             surface,
             device,
             queue,
             config,
             background_color: RGBA::default(),
+            uniform_color_pipeline,
+            uniform_color_vertex_buffer,
+            vertex_color_pipeline,
+            vertex_color_vertex_buffer,
         })
     }
 
@@ -50,13 +67,18 @@ impl WgpuRenderer {
             });
 
         {
-            let _render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("Render Pass"),
                 color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                     view: &view,
                     resolve_target: None,
                     ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear(RGBA::from_hex(0xFF_00_00_FF).into()),
+                        load: wgpu::LoadOp::Clear(wgpu::Color {
+                            r: 0.1,
+                            g: 0.1,
+                            b: 0.1,
+                            a: 1.0,
+                        }),
                         store: wgpu::StoreOp::Store,
                     },
                     depth_slice: None,
@@ -66,6 +88,16 @@ impl WgpuRenderer {
                 timestamp_writes: None,
                 multiview_mask: None,
             });
+
+            // Renderowanie pierwszego trójkąta (lewy - jednolity kolor)
+            render_pass.set_pipeline(&self.uniform_color_pipeline);
+            render_pass.set_vertex_buffer(0, self.uniform_color_vertex_buffer.slice(..));
+            render_pass.draw(0..3, 0..1);
+
+            // Renderowanie drugiego trójkąta (prawy - kolory per wierzchołek)
+            render_pass.set_pipeline(&self.vertex_color_pipeline);
+            render_pass.set_vertex_buffer(0, self.vertex_color_vertex_buffer.slice(..));
+            render_pass.draw(0..3, 0..1);
         }
 
         self.queue.submit(std::iter::once(encoder.finish()));
@@ -146,6 +178,230 @@ impl WgpuRenderer {
             .map_err(|e| {
                 RendererError::Initialization(format!("Failed to create connection with GPU: {e}",))
             })
+    }
+
+    // Pipeline dla trójkąta z jednolitym kolorem (lewy trójkąt)
+    fn create_uniform_color_triangle_pipeline(
+        device: &wgpu::Device,
+        config: &wgpu::SurfaceConfiguration,
+    ) -> (wgpu::RenderPipeline, wgpu::Buffer) {
+        // Shader z jednolitym kolorem
+        let shader_source = r#"
+            struct VertexOutput {
+                @builtin(position) position: vec4<f32>,
+            }
+
+            @vertex
+            fn vs_main(@location(0) position: vec2<f32>) -> VertexOutput {
+                var output: VertexOutput;
+                output.position = vec4<f32>(position, 0.0, 1.0);
+                return output;
+            }
+
+            @fragment
+            fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
+                // Jednolity niebieski kolor
+                return vec4<f32>(0.0, 0.5, 1.0, 1.0);
+            }
+        "#;
+
+        let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("Uniform Color Shader"),
+            source: wgpu::ShaderSource::Wgsl(shader_source.into()),
+        });
+
+        // Wierzchołki dla lewego trójkąta (tylko pozycje)
+        #[repr(C)]
+        #[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
+        struct Vertex {
+            position: [f32; 2],
+        }
+
+        let vertices = [
+            Vertex { position: [-0.8, -0.5] },  // lewy dolny
+            Vertex { position: [-0.3, -0.5] },  // prawy dolny
+            Vertex { position: [-0.55, 0.5] },  // górny
+        ];
+
+        let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Uniform Color Vertex Buffer"),
+            contents: bytemuck::cast_slice(&vertices),
+            usage: wgpu::BufferUsages::VERTEX,
+        });
+
+        let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("Uniform Color Pipeline Layout"),
+            bind_group_layouts: &[],
+            immediate_size: 0,
+        });
+
+        let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("Uniform Color Pipeline"),
+            layout: Some(&pipeline_layout),
+            vertex: wgpu::VertexState {
+                module: &shader,
+                entry_point: Some("vs_main"),
+                buffers: &[wgpu::VertexBufferLayout {
+                    array_stride: std::mem::size_of::<Vertex>() as wgpu::BufferAddress,
+                    step_mode: wgpu::VertexStepMode::Vertex,
+                    attributes: &[
+                        wgpu::VertexAttribute {
+                            offset: 0,
+                            shader_location: 0,
+                            format: wgpu::VertexFormat::Float32x2,
+                        },
+                    ],
+                }],
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+            },
+            fragment: Some(wgpu::FragmentState {
+                module: &shader,
+                entry_point: Some("fs_main"),
+                targets: &[Some(wgpu::ColorTargetState {
+                    format: config.format,
+                    blend: Some(wgpu::BlendState::REPLACE),
+                    write_mask: wgpu::ColorWrites::ALL,
+                })],
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+            }),
+            primitive: wgpu::PrimitiveState {
+                topology: wgpu::PrimitiveTopology::TriangleList,
+                strip_index_format: None,
+                front_face: wgpu::FrontFace::Ccw,
+                cull_mode: Some(wgpu::Face::Back),
+                polygon_mode: wgpu::PolygonMode::Fill,
+                unclipped_depth: false,
+                conservative: false,
+            },
+            depth_stencil: None,
+            multisample: wgpu::MultisampleState {
+                count: 1,
+                mask: !0,
+                alpha_to_coverage_enabled: false,
+            },
+            multiview_mask: None,
+            cache: None,
+        });
+
+        (pipeline, vertex_buffer)
+    }
+
+    // Pipeline dla trójkąta z kolorami per wierzchołek (prawy trójkąt)
+    fn create_vertex_color_triangle_pipeline(
+        device: &wgpu::Device,
+        config: &wgpu::SurfaceConfiguration,
+    ) -> (wgpu::RenderPipeline, wgpu::Buffer) {
+        // Shader z kolorami per wierzchołek
+        let shader_source = r#"
+            struct VertexInput {
+                @location(0) position: vec2<f32>,
+                @location(1) color: vec3<f32>,
+            }
+
+            struct VertexOutput {
+                @builtin(position) position: vec4<f32>,
+                @location(0) color: vec3<f32>,
+            }
+
+            @vertex
+            fn vs_main(input: VertexInput) -> VertexOutput {
+                var output: VertexOutput;
+                output.position = vec4<f32>(input.position, 0.0, 1.0);
+                output.color = input.color;
+                return output;
+            }
+
+            @fragment
+            fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
+                return vec4<f32>(input.color, 1.0);
+            }
+        "#;
+
+        let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
+            label: Some("Vertex Color Shader"),
+            source: wgpu::ShaderSource::Wgsl(shader_source.into()),
+        });
+
+        // Wierzchołki dla prawego trójkąta (pozycje + kolory)
+        #[repr(C)]
+        #[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
+        struct Vertex {
+            position: [f32; 2],
+            color: [f32; 3],
+        }
+
+        let vertices = [
+            Vertex { position: [0.3, -0.5], color: [1.0, 0.0, 0.0] },  // lewy dolny - czerwony
+            Vertex { position: [0.8, -0.5], color: [0.0, 1.0, 0.0] },  // prawy dolny - zielony
+            Vertex { position: [0.55, 0.5], color: [0.0, 0.0, 1.0] },  // górny - niebieski
+        ];
+
+        let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Vertex Color Vertex Buffer"),
+            contents: bytemuck::cast_slice(&vertices),
+            usage: wgpu::BufferUsages::VERTEX,
+        });
+
+        let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
+            label: Some("Vertex Color Pipeline Layout"),
+            bind_group_layouts: &[],
+            immediate_size: 0,
+        });
+
+        let pipeline = device.create_render_pipeline(&wgpu::RenderPipelineDescriptor {
+            label: Some("Vertex Color Pipeline"),
+            layout: Some(&pipeline_layout),
+            vertex: wgpu::VertexState {
+                module: &shader,
+                entry_point: Some("vs_main"),
+                buffers: &[wgpu::VertexBufferLayout {
+                    array_stride: std::mem::size_of::<Vertex>() as wgpu::BufferAddress,
+                    step_mode: wgpu::VertexStepMode::Vertex,
+                    attributes: &[
+                        wgpu::VertexAttribute {
+                            offset: 0,
+                            shader_location: 0,
+                            format: wgpu::VertexFormat::Float32x2,
+                        },
+                        wgpu::VertexAttribute {
+                            offset: std::mem::size_of::<[f32; 2]>() as wgpu::BufferAddress,
+                            shader_location: 1,
+                            format: wgpu::VertexFormat::Float32x3,
+                        },
+                    ],
+                }],
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+            },
+            fragment: Some(wgpu::FragmentState {
+                module: &shader,
+                entry_point: Some("fs_main"),
+                targets: &[Some(wgpu::ColorTargetState {
+                    format: config.format,
+                    blend: Some(wgpu::BlendState::REPLACE),
+                    write_mask: wgpu::ColorWrites::ALL,
+                })],
+                compilation_options: wgpu::PipelineCompilationOptions::default(),
+            }),
+            primitive: wgpu::PrimitiveState {
+                topology: wgpu::PrimitiveTopology::TriangleList,
+                strip_index_format: None,
+                front_face: wgpu::FrontFace::Ccw,
+                cull_mode: Some(wgpu::Face::Back),
+                polygon_mode: wgpu::PolygonMode::Fill,
+                unclipped_depth: false,
+                conservative: false,
+            },
+            depth_stencil: None,
+            multisample: wgpu::MultisampleState {
+                count: 1,
+                mask: !0,
+                alpha_to_coverage_enabled: false,
+            },
+            multiview_mask: None,
+            cache: None,
+        });
+
+        (pipeline, vertex_buffer)
     }
 }
 
