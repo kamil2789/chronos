@@ -1,3 +1,5 @@
+mod shaders;
+
 use std::sync::Arc;
 use wgpu::MemoryHints;
 use wgpu::util::DeviceExt;
@@ -13,13 +15,15 @@ pub struct WgpuRenderer {
     device: wgpu::Device,
     queue: wgpu::Queue,
     config: wgpu::SurfaceConfiguration,
+    shader_manager: shaders::ShaderManager,
+    //fields to refactor
     background_color: RGBA,
     // Pipeline dla trójkąta z jednolitym kolorem
-    uniform_color_pipeline: wgpu::RenderPipeline,
-    uniform_color_vertex_buffer: wgpu::Buffer,
+    uniform_color_pipeline: Option<wgpu::RenderPipeline>,
+    uniform_color_vertex_buffer: Option<wgpu::Buffer>,
     // Pipeline dla trójkąta z kolorami per wierzchołek
-    vertex_color_pipeline: wgpu::RenderPipeline,
-    vertex_color_vertex_buffer: wgpu::Buffer,
+    vertex_color_pipeline: Option<wgpu::RenderPipeline>,
+    vertex_color_vertex_buffer: Option<wgpu::Buffer>,
 }
 
 impl WgpuRenderer {
@@ -34,22 +38,20 @@ impl WgpuRenderer {
 
         surface.configure(&device, &config);
 
-        // Tworzenie pipeline'ów i buforów dla trójkątów
-        let (uniform_color_pipeline, uniform_color_vertex_buffer) = 
-            Self::create_uniform_color_triangle_pipeline(&device, &config);
-        let (vertex_color_pipeline, vertex_color_vertex_buffer) = 
-            Self::create_vertex_color_triangle_pipeline(&device, &config);
+        // Inicjalizacja ShaderManager (bez kompilacji - to zrobi compile_all_shaders())
+        let shader_manager = shaders::ShaderManager::default();
 
         Ok(Self {
             surface,
             device,
             queue,
             config,
+            shader_manager,
             background_color: RGBA::default(),
-            uniform_color_pipeline,
-            uniform_color_vertex_buffer,
-            vertex_color_pipeline,
-            vertex_color_vertex_buffer,
+            uniform_color_pipeline: None,
+            uniform_color_vertex_buffer: None,
+            vertex_color_pipeline: None,
+            vertex_color_vertex_buffer: None,
         })
     }
 
@@ -90,14 +92,24 @@ impl WgpuRenderer {
             });
 
             // Renderowanie pierwszego trójkąta (lewy - jednolity kolor)
-            render_pass.set_pipeline(&self.uniform_color_pipeline);
-            render_pass.set_vertex_buffer(0, self.uniform_color_vertex_buffer.slice(..));
-            render_pass.draw(0..3, 0..1);
+            if let (Some(pipeline), Some(buffer)) = (
+                &self.uniform_color_pipeline,
+                &self.uniform_color_vertex_buffer,
+            ) {
+                render_pass.set_pipeline(pipeline);
+                render_pass.set_vertex_buffer(0, buffer.slice(..));
+                render_pass.draw(0..3, 0..1);
+            }
 
             // Renderowanie drugiego trójkąta (prawy - kolory per wierzchołek)
-            render_pass.set_pipeline(&self.vertex_color_pipeline);
-            render_pass.set_vertex_buffer(0, self.vertex_color_vertex_buffer.slice(..));
-            render_pass.draw(0..3, 0..1);
+            if let (Some(pipeline), Some(buffer)) = (
+                &self.vertex_color_pipeline,
+                &self.vertex_color_vertex_buffer,
+            ) {
+                render_pass.set_pipeline(pipeline);
+                render_pass.set_vertex_buffer(0, buffer.slice(..));
+                render_pass.draw(0..3, 0..1);
+            }
         }
 
         self.queue.submit(std::iter::once(encoder.finish()));
@@ -184,31 +196,11 @@ impl WgpuRenderer {
     fn create_uniform_color_triangle_pipeline(
         device: &wgpu::Device,
         config: &wgpu::SurfaceConfiguration,
-    ) -> (wgpu::RenderPipeline, wgpu::Buffer) {
-        // Shader z jednolitym kolorem
-        let shader_source = r#"
-            struct VertexOutput {
-                @builtin(position) position: vec4<f32>,
-            }
-
-            @vertex
-            fn vs_main(@location(0) position: vec2<f32>) -> VertexOutput {
-                var output: VertexOutput;
-                output.position = vec4<f32>(position, 0.0, 1.0);
-                return output;
-            }
-
-            @fragment
-            fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
-                // Jednolity niebieski kolor
-                return vec4<f32>(0.0, 0.5, 1.0, 1.0);
-            }
-        "#;
-
-        let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-            label: Some("Uniform Color Shader"),
-            source: wgpu::ShaderSource::Wgsl(shader_source.into()),
-        });
+        shader_manager: &shaders::ShaderManager,
+    ) -> Result<(wgpu::RenderPipeline, wgpu::Buffer)> {
+        let shader = shader_manager.get_shader("uniform_color").ok_or_else(|| {
+            RendererError::Initialization("Shader 'uniform_color' not found".to_string())
+        })?;
 
         // Wierzchołki dla lewego trójkąta (tylko pozycje)
         #[repr(C)]
@@ -218,9 +210,15 @@ impl WgpuRenderer {
         }
 
         let vertices = [
-            Vertex { position: [-0.8, -0.5] },  // lewy dolny
-            Vertex { position: [-0.3, -0.5] },  // prawy dolny
-            Vertex { position: [-0.55, 0.5] },  // górny
+            Vertex {
+                position: [-0.8, -0.5],
+            }, // lewy dolny
+            Vertex {
+                position: [-0.3, -0.5],
+            }, // prawy dolny
+            Vertex {
+                position: [-0.55, 0.5],
+            }, // górny
         ];
 
         let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
@@ -244,13 +242,11 @@ impl WgpuRenderer {
                 buffers: &[wgpu::VertexBufferLayout {
                     array_stride: std::mem::size_of::<Vertex>() as wgpu::BufferAddress,
                     step_mode: wgpu::VertexStepMode::Vertex,
-                    attributes: &[
-                        wgpu::VertexAttribute {
-                            offset: 0,
-                            shader_location: 0,
-                            format: wgpu::VertexFormat::Float32x2,
-                        },
-                    ],
+                    attributes: &[wgpu::VertexAttribute {
+                        offset: 0,
+                        shader_location: 0,
+                        format: wgpu::VertexFormat::Float32x2,
+                    }],
                 }],
                 compilation_options: wgpu::PipelineCompilationOptions::default(),
             },
@@ -283,44 +279,18 @@ impl WgpuRenderer {
             cache: None,
         });
 
-        (pipeline, vertex_buffer)
+        Ok((pipeline, vertex_buffer))
     }
 
     // Pipeline dla trójkąta z kolorami per wierzchołek (prawy trójkąt)
     fn create_vertex_color_triangle_pipeline(
         device: &wgpu::Device,
         config: &wgpu::SurfaceConfiguration,
-    ) -> (wgpu::RenderPipeline, wgpu::Buffer) {
-        // Shader z kolorami per wierzchołek
-        let shader_source = r#"
-            struct VertexInput {
-                @location(0) position: vec2<f32>,
-                @location(1) color: vec3<f32>,
-            }
-
-            struct VertexOutput {
-                @builtin(position) position: vec4<f32>,
-                @location(0) color: vec3<f32>,
-            }
-
-            @vertex
-            fn vs_main(input: VertexInput) -> VertexOutput {
-                var output: VertexOutput;
-                output.position = vec4<f32>(input.position, 0.0, 1.0);
-                output.color = input.color;
-                return output;
-            }
-
-            @fragment
-            fn fs_main(input: VertexOutput) -> @location(0) vec4<f32> {
-                return vec4<f32>(input.color, 1.0);
-            }
-        "#;
-
-        let shader = device.create_shader_module(wgpu::ShaderModuleDescriptor {
-            label: Some("Vertex Color Shader"),
-            source: wgpu::ShaderSource::Wgsl(shader_source.into()),
-        });
+        shader_manager: &shaders::ShaderManager,
+    ) -> Result<(wgpu::RenderPipeline, wgpu::Buffer)> {
+        let shader = shader_manager.get_shader("vertex_color").ok_or_else(|| {
+            RendererError::Initialization("Shader 'vertex_color' not found".to_string())
+        })?;
 
         // Wierzchołki dla prawego trójkąta (pozycje + kolory)
         #[repr(C)]
@@ -331,9 +301,18 @@ impl WgpuRenderer {
         }
 
         let vertices = [
-            Vertex { position: [0.3, -0.5], color: [1.0, 0.0, 0.0] },  // lewy dolny - czerwony
-            Vertex { position: [0.8, -0.5], color: [0.0, 1.0, 0.0] },  // prawy dolny - zielony
-            Vertex { position: [0.55, 0.5], color: [0.0, 0.0, 1.0] },  // górny - niebieski
+            Vertex {
+                position: [0.3, -0.5],
+                color: [1.0, 0.0, 0.0],
+            }, // lewy dolny - czerwony
+            Vertex {
+                position: [0.8, -0.5],
+                color: [0.0, 1.0, 0.0],
+            }, // prawy dolny - zielony
+            Vertex {
+                position: [0.55, 0.5],
+                color: [0.0, 0.0, 1.0],
+            }, // górny - niebieski
         ];
 
         let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
@@ -401,14 +380,39 @@ impl WgpuRenderer {
             cache: None,
         });
 
-        (pipeline, vertex_buffer)
+        Ok((pipeline, vertex_buffer))
     }
 }
 
 impl Renderer for WgpuRenderer {
-    //fn compile_shader(&mut self, _source: &shader_source::ShaderSource) -> Result<ShaderId> {
-    //    unimplemented!("Wgpu shader compilation is not implemented yet");
-    //}
+    fn compile_all_shaders(&mut self) -> Result<()> {
+        // Kompiluj shadery
+        self.shader_manager.compile_all(&self.device).map_err(|e| {
+            RendererError::Initialization(format!("Failed to compile shaders: {e}"))
+        })?;
+
+        // Twórz pipeline'y używając skompilowanych shaderów
+        let (uniform_color_pipeline, uniform_color_vertex_buffer) =
+            Self::create_uniform_color_triangle_pipeline(
+                &self.device,
+                &self.config,
+                &self.shader_manager,
+            )?;
+        let (vertex_color_pipeline, vertex_color_vertex_buffer) =
+            Self::create_vertex_color_triangle_pipeline(
+                &self.device,
+                &self.config,
+                &self.shader_manager,
+            )?;
+
+        // Zapisz pipeline'y
+        self.uniform_color_pipeline = Some(uniform_color_pipeline);
+        self.uniform_color_vertex_buffer = Some(uniform_color_vertex_buffer);
+        self.vertex_color_pipeline = Some(vertex_color_pipeline);
+        self.vertex_color_vertex_buffer = Some(vertex_color_vertex_buffer);
+
+        Ok(())
+    }
 
     fn render(&mut self) -> Result<()> {
         self.render().map_err(|e| match e {

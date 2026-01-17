@@ -10,8 +10,8 @@ use winit::window::{Window, WindowId};
 use crate::components::color::RGBA;
 use crate::configs::EngineConfig;
 use crate::game_engine::game_loop::GameLoop;
-use crate::renderer::shader_source::{ShaderManager, ShaderSource};
 use crate::renderer::{Renderer, init_render};
+use crate::scene::Scene;
 
 pub type Result<T> = std::result::Result<T, EngineError>;
 
@@ -31,8 +31,8 @@ pub enum RendererType {
 pub struct ChronosEngine {
     window: Option<Arc<winit::window::Window>>,
     renderer: Option<Box<dyn Renderer>>,
-    shader_manager: ShaderManager,
     config: EngineConfig,
+    _scene: Scene,
 }
 
 impl ChronosEngine {
@@ -42,8 +42,8 @@ impl ChronosEngine {
         Self {
             window: None,
             renderer: None,
-            shader_manager: ShaderManager::default(),
             config,
+            _scene: Scene::default(),
         }
     }
 
@@ -57,12 +57,6 @@ impl ChronosEngine {
         event_loop.set_control_flow(ControlFlow::Poll);
         event_loop.run_app(self)?;
         Ok(())
-    }
-
-    /// Loads a shader into the engine.
-    pub fn load_shader(&mut self, name: &str, shader_source: &ShaderSource) {
-        self.shader_manager
-            .register_from_source(name, shader_source);
     }
 
     pub fn set_background_color(&mut self, color: &RGBA) {
@@ -117,10 +111,18 @@ impl ApplicationHandler for ChronosEngine {
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         if let Ok(window) = self.create_window(event_loop) {
             match init_render(window.clone(), &self.config.renderer_type) {
-                Ok(renderer) => self.renderer = Some(renderer),
+                Ok(mut renderer) => {
+                    if let Err(e) = renderer.compile_all_shaders() {
+                        eprintln!("Failed to compile shaders: {e}");
+                        event_loop.exit();
+                        return;
+                    }
+                    self.renderer = Some(renderer);
+                }
                 Err(e) => {
                     eprintln!("Failed to initialize renderer: {e}");
                     event_loop.exit();
+                    return;
                 }
             }
             self.window = Some(window);
