@@ -7,7 +7,6 @@ use winit::event::WindowEvent;
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
 use winit::window::{Window, WindowId};
 
-use crate::components::color::RGBA;
 use crate::configs::EngineConfig;
 use crate::game_engine::game_loop::GameLoop;
 use crate::renderer::{Renderer, init_render};
@@ -32,7 +31,7 @@ pub struct ChronosEngine {
     window: Option<Arc<winit::window::Window>>,
     renderer: Option<Box<dyn Renderer>>,
     config: EngineConfig,
-    _scene: Scene,
+    scene: Scene,
 }
 
 impl ChronosEngine {
@@ -43,7 +42,7 @@ impl ChronosEngine {
             window: None,
             renderer: None,
             config,
-            _scene: Scene::default(),
+            scene: Scene::default(),
         }
     }
 
@@ -59,10 +58,8 @@ impl ChronosEngine {
         Ok(())
     }
 
-    pub fn set_background_color(&mut self, color: &RGBA) {
-        if let Some(renderer) = &mut self.renderer {
-            renderer.set_background_color(color);
-        }
+    pub fn register_scene(&mut self, scene: Scene) {
+        self.scene = scene;
     }
 
     fn create_window(&mut self, event_loop: &ActiveEventLoop) -> Result<Arc<Window>> {
@@ -89,7 +86,7 @@ impl ChronosEngine {
     fn on_redraw_requested(&mut self) {
         if let Some(window) = &self.window {
             if let Some(renderer) = &mut self.renderer {
-                GameLoop::main_frame(renderer.as_mut(), window);
+                GameLoop::main_frame(renderer.as_mut(), window, &self.scene);
             }
             window.request_redraw();
         }

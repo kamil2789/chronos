@@ -5,6 +5,12 @@ pub struct Scene {
     pub background_color: RGBA,
 }
 
+impl Scene {
+    pub fn set_background_color(&mut self, color: &RGBA) {
+        self.background_color = color.clone();
+    }
+}
+
 impl Default for Scene {
     fn default() -> Self {
         Self {
