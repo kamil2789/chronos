@@ -14,7 +14,7 @@ impl GameLoop {
 
     fn run_render(renderer: &mut dyn Renderer, window: &Window, actual_scene: &Scene) {
         renderer.set_background_color(&actual_scene.background_color);
-        match renderer.render() {
+        match renderer.render(actual_scene) {
             Ok(()) => {}
             Err(RendererError::Surface(_)) => {
                 let size = window.inner_size();

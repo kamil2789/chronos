@@ -9,6 +9,7 @@ use winit::window::Window;
 use crate::components::color::RGBA;
 use crate::renderer::Renderer;
 use crate::renderer::{RendererError, Result};
+use crate::scene::Scene;
 
 pub struct WgpuRenderer {
     surface: wgpu::Surface<'static>,
@@ -16,14 +17,12 @@ pub struct WgpuRenderer {
     queue: wgpu::Queue,
     config: wgpu::SurfaceConfiguration,
     shader_manager: shaders::ShaderManager,
-    //fields to refactor
     background_color: RGBA,
-    // Pipeline dla trójkąta z jednolitym kolorem
+    // Pipeline for rendering with uniform color
     uniform_color_pipeline: Option<wgpu::RenderPipeline>,
-    uniform_color_vertex_buffer: Option<wgpu::Buffer>,
-    // Pipeline dla trójkąta z kolorami per wierzchołek
+    color_bind_group_layout: Option<wgpu::BindGroupLayout>,
+    // Pipeline for rendering with per-vertex colors
     vertex_color_pipeline: Option<wgpu::RenderPipeline>,
-    vertex_color_vertex_buffer: Option<wgpu::Buffer>,
 }
 
 impl WgpuRenderer {
@@ -35,10 +34,8 @@ impl WgpuRenderer {
         let (device, queue) = Self::create_connection_with_gpu(&adapter).await?;
 
         let config = Self::create_surface_config(&surface, &adapter, size);
-
         surface.configure(&device, &config);
 
-        // Inicjalizacja ShaderManager (bez kompilacji - to zrobi compile_all_shaders())
         let shader_manager = shaders::ShaderManager::default();
 
         Ok(Self {
@@ -49,14 +46,13 @@ impl WgpuRenderer {
             shader_manager,
             background_color: RGBA::default(),
             uniform_color_pipeline: None,
-            uniform_color_vertex_buffer: None,
+            color_bind_group_layout: None,
             vertex_color_pipeline: None,
-            vertex_color_vertex_buffer: None,
         })
     }
 
     //Need refactor
-    pub fn render(&mut self) -> std::result::Result<(), wgpu::SurfaceError> {
+    pub fn render(&mut self, scene: &Scene) -> std::result::Result<(), wgpu::SurfaceError> {
         let output = self.surface.get_current_texture()?;
         let view = output
             .texture
@@ -86,24 +82,26 @@ impl WgpuRenderer {
                 multiview_mask: None,
             });
 
-            // Renderowanie pierwszego trójkąta (lewy - jednolity kolor)
-            if let (Some(pipeline), Some(buffer)) = (
-                &self.uniform_color_pipeline,
-                &self.uniform_color_vertex_buffer,
-            ) {
-                render_pass.set_pipeline(pipeline);
-                render_pass.set_vertex_buffer(0, buffer.slice(..));
-                render_pass.draw(0..3, 0..1);
-            }
-
-            // Renderowanie drugiego trójkąta (prawy - kolory per wierzchołek)
-            if let (Some(pipeline), Some(buffer)) = (
-                &self.vertex_color_pipeline,
-                &self.vertex_color_vertex_buffer,
-            ) {
-                render_pass.set_pipeline(pipeline);
-                render_pass.set_vertex_buffer(0, buffer.slice(..));
-                render_pass.draw(0..3, 0..1);
+            // Get all entities with Shape and Color components
+            let entities = scene.entity_manager.get_entities_with_shape_and_color();
+            
+            for entity_id in entities {
+                if let (Some(shape), Some(color)) = (
+                    scene.entity_manager.get_component::<crate::components::shape::Shape>(entity_id),
+                    scene.entity_manager.get_component::<crate::components::color::Color>(entity_id)
+                ) {
+                    if color.is_uniform() {
+                        // Render with uniform color
+                        if let Some(pipeline) = &self.uniform_color_pipeline {
+                            self.render_entity_with_uniform_color(&mut render_pass, pipeline, shape, color);
+                        }
+                    } else {
+                        // Render with per-vertex colors
+                        if let Some(pipeline) = &self.vertex_color_pipeline {
+                            self.render_entity_with_vertex_color(&mut render_pass, pipeline, shape, color);
+                        }
+                    }
+                }
             }
         }
 
@@ -187,44 +185,34 @@ impl WgpuRenderer {
             })
     }
 
-    // Pipeline dla trójkąta z jednolitym kolorem (lewy trójkąt)
-    fn create_uniform_color_triangle_pipeline(
+    // Pipeline for rendering with uniform color
+    fn create_uniform_color_pipeline(
         device: &wgpu::Device,
         config: &wgpu::SurfaceConfiguration,
         shader_manager: &shaders::ShaderManager,
-    ) -> Result<(wgpu::RenderPipeline, wgpu::Buffer)> {
+    ) -> Result<(wgpu::RenderPipeline, wgpu::BindGroupLayout)> {
         let shader = shader_manager.get_shader("uniform_color").ok_or_else(|| {
             RendererError::Initialization("Shader 'uniform_color' not found".to_string())
         })?;
 
-        // Wierzchołki dla lewego trójkąta (tylko pozycje)
-        #[repr(C)]
-        #[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
-        struct Vertex {
-            position: [f32; 2],
-        }
-
-        let vertices = [
-            Vertex {
-                position: [-0.8, -0.5],
-            }, // lewy dolny
-            Vertex {
-                position: [-0.3, -0.5],
-            }, // prawy dolny
-            Vertex {
-                position: [-0.55, 0.5],
-            }, // górny
-        ];
-
-        let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Uniform Color Vertex Buffer"),
-            contents: bytemuck::cast_slice(&vertices),
-            usage: wgpu::BufferUsages::VERTEX,
+        // Create bind group layout for color uniform buffer
+        let color_bind_group_layout = device.create_bind_group_layout(&wgpu::BindGroupLayoutDescriptor {
+            label: Some("Color Bind Group Layout"),
+            entries: &[wgpu::BindGroupLayoutEntry {
+                binding: 0,
+                visibility: wgpu::ShaderStages::FRAGMENT,
+                ty: wgpu::BindingType::Buffer {
+                    ty: wgpu::BufferBindingType::Uniform,
+                    has_dynamic_offset: false,
+                    min_binding_size: None,
+                },
+                count: None,
+            }],
         });
 
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("Uniform Color Pipeline Layout"),
-            bind_group_layouts: &[],
+            bind_group_layouts: &[&color_bind_group_layout],
             immediate_size: 0,
         });
 
@@ -235,12 +223,12 @@ impl WgpuRenderer {
                 module: &shader,
                 entry_point: Some("vs_main"),
                 buffers: &[wgpu::VertexBufferLayout {
-                    array_stride: std::mem::size_of::<Vertex>() as wgpu::BufferAddress,
+                    array_stride: std::mem::size_of::<[f32; 3]>() as wgpu::BufferAddress,
                     step_mode: wgpu::VertexStepMode::Vertex,
                     attributes: &[wgpu::VertexAttribute {
                         offset: 0,
                         shader_location: 0,
-                        format: wgpu::VertexFormat::Float32x2,
+                        format: wgpu::VertexFormat::Float32x3,
                     }],
                 }],
                 compilation_options: wgpu::PipelineCompilationOptions::default(),
@@ -274,47 +262,18 @@ impl WgpuRenderer {
             cache: None,
         });
 
-        Ok((pipeline, vertex_buffer))
+        Ok((pipeline, color_bind_group_layout))
     }
 
-    // Pipeline dla trójkąta z kolorami per wierzchołek (prawy trójkąt)
-    fn create_vertex_color_triangle_pipeline(
+    // Pipeline for rendering with per-vertex colors
+    fn create_vertex_color_pipeline(
         device: &wgpu::Device,
         config: &wgpu::SurfaceConfiguration,
         shader_manager: &shaders::ShaderManager,
-    ) -> Result<(wgpu::RenderPipeline, wgpu::Buffer)> {
+    ) -> Result<wgpu::RenderPipeline> {
         let shader = shader_manager.get_shader("vertex_color").ok_or_else(|| {
             RendererError::Initialization("Shader 'vertex_color' not found".to_string())
         })?;
-
-        // Wierzchołki dla prawego trójkąta (pozycje + kolory)
-        #[repr(C)]
-        #[derive(Copy, Clone, bytemuck::Pod, bytemuck::Zeroable)]
-        struct Vertex {
-            position: [f32; 2],
-            color: [f32; 3],
-        }
-
-        let vertices = [
-            Vertex {
-                position: [0.3, -0.5],
-                color: [1.0, 0.0, 0.0],
-            }, // lewy dolny - czerwony
-            Vertex {
-                position: [0.8, -0.5],
-                color: [0.0, 1.0, 0.0],
-            }, // prawy dolny - zielony
-            Vertex {
-                position: [0.55, 0.5],
-                color: [0.0, 0.0, 1.0],
-            }, // górny - niebieski
-        ];
-
-        let vertex_buffer = device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Vertex Color Vertex Buffer"),
-            contents: bytemuck::cast_slice(&vertices),
-            usage: wgpu::BufferUsages::VERTEX,
-        });
 
         let pipeline_layout = device.create_pipeline_layout(&wgpu::PipelineLayoutDescriptor {
             label: Some("Vertex Color Pipeline Layout"),
@@ -329,18 +288,18 @@ impl WgpuRenderer {
                 module: &shader,
                 entry_point: Some("vs_main"),
                 buffers: &[wgpu::VertexBufferLayout {
-                    array_stride: std::mem::size_of::<Vertex>() as wgpu::BufferAddress,
+                    array_stride: (std::mem::size_of::<[f32; 3]>() + std::mem::size_of::<[f32; 4]>()) as wgpu::BufferAddress,
                     step_mode: wgpu::VertexStepMode::Vertex,
                     attributes: &[
                         wgpu::VertexAttribute {
                             offset: 0,
                             shader_location: 0,
-                            format: wgpu::VertexFormat::Float32x2,
+                            format: wgpu::VertexFormat::Float32x3,
                         },
                         wgpu::VertexAttribute {
-                            offset: std::mem::size_of::<[f32; 2]>() as wgpu::BufferAddress,
+                            offset: std::mem::size_of::<[f32; 3]>() as wgpu::BufferAddress,
                             shader_location: 1,
-                            format: wgpu::VertexFormat::Float32x3,
+                            format: wgpu::VertexFormat::Float32x4,
                         },
                     ],
                 }],
@@ -375,42 +334,141 @@ impl WgpuRenderer {
             cache: None,
         });
 
-        Ok((pipeline, vertex_buffer))
+        Ok(pipeline)
+    }
+
+    fn render_entity_with_vertex_color(
+        &self,
+        render_pass: &mut wgpu::RenderPass,
+        pipeline: &wgpu::RenderPipeline,
+        shape: &crate::components::shape::Shape,
+        color: &crate::components::color::Color,
+    ) {
+        // Get per-vertex colors
+        if let Some(vertex_colors) = color.get_vertex_colors() {
+            let vertices = shape.get_vertices();
+            
+            // Validation: check if color count matches vertex count (4 floats per vertex: r,g,b,a)
+            if vertex_colors.len() != vertices.len() * 4 {
+                eprintln!("Warning: vertex color count mismatch. Expected {} floats, got {}", 
+                    vertices.len() * 4, vertex_colors.len());
+                return;
+            }
+
+            // Build interleaved vertex buffer: [pos.x, pos.y, pos.z, color.r, color.g, color.b, color.a, ...]
+            let mut vertex_data: Vec<f32> = Vec::with_capacity(vertices.len() * 7);
+            for (i, vertex) in vertices.iter().enumerate() {
+                vertex_data.push(vertex.x);
+                vertex_data.push(vertex.y);
+                vertex_data.push(vertex.z);
+                vertex_data.push(vertex_colors[i * 4]);
+                vertex_data.push(vertex_colors[i * 4 + 1]);
+                vertex_data.push(vertex_colors[i * 4 + 2]);
+                vertex_data.push(vertex_colors[i * 4 + 3]);
+            }
+
+            // Create vertex buffer
+            let vertex_buffer = self.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("Vertex Color Vertex Buffer"),
+                contents: bytemuck::cast_slice(&vertex_data),
+                usage: wgpu::BufferUsages::VERTEX,
+            });
+
+            render_pass.set_pipeline(pipeline);
+            render_pass.set_vertex_buffer(0, vertex_buffer.slice(..));
+            render_pass.draw(0..vertices.len() as u32, 0..1);
+        }
+    }
+
+    fn render_entity_with_uniform_color(
+        &self,
+        render_pass: &mut wgpu::RenderPass,
+        pipeline: &wgpu::RenderPipeline,
+        shape: &crate::components::shape::Shape,
+        color: &crate::components::color::Color,
+    ) {
+        // Konwertuj Vec3 do [f32; 3] (x, y, z)
+        let vertices: Vec<[f32; 3]> = shape
+            .get_vertices()
+            .iter()
+            .map(|v| [v.x, v.y, v.z])
+            .collect();
+
+        // Create vertex buffer for this specific shape
+        let vertex_buffer = self.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+            label: Some("Entity Vertex Buffer"),
+            contents: bytemuck::cast_slice(&vertices),
+            usage: wgpu::BufferUsages::VERTEX,
+        });
+
+        // Get color from component and prepare uniform buffer
+        if let (Some(rgba), Some(layout)) = (color.get_uniform_color(), &self.color_bind_group_layout) {
+            let wgpu_color: wgpu::Color = rgba.into();
+            let color_data: [f32; 4] = [
+                wgpu_color.r as f32,
+                wgpu_color.g as f32,
+                wgpu_color.b as f32,
+                wgpu_color.a as f32,
+            ];
+
+            // Create uniform buffer for color
+            let color_buffer = self.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                label: Some("Color Uniform Buffer"),
+                contents: bytemuck::cast_slice(&color_data),
+                usage: wgpu::BufferUsages::UNIFORM,
+            });
+
+            // Create bind group
+            let color_bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                label: Some("Color Bind Group"),
+                layout,
+                entries: &[wgpu::BindGroupEntry {
+                    binding: 0,
+                    resource: color_buffer.as_entire_binding(),
+                }],
+            });
+
+            render_pass.set_pipeline(pipeline);
+            render_pass.set_bind_group(0, &color_bind_group, &[]);
+            render_pass.set_vertex_buffer(0, vertex_buffer.slice(..));
+            render_pass.draw(0..vertices.len() as u32, 0..1);
+        }
     }
 }
 
 impl Renderer for WgpuRenderer {
     fn compile_all_shaders(&mut self) -> Result<()> {
-        // Kompiluj shadery
+        // Compile shaders
         self.shader_manager.compile_all(&self.device).map_err(|e| {
             RendererError::Initialization(format!("Failed to compile shaders: {e}"))
         })?;
 
-        // Twórz pipeline'y używając skompilowanych shaderów
-        let (uniform_color_pipeline, uniform_color_vertex_buffer) =
-            Self::create_uniform_color_triangle_pipeline(
-                &self.device,
-                &self.config,
-                &self.shader_manager,
-            )?;
-        let (vertex_color_pipeline, vertex_color_vertex_buffer) =
-            Self::create_vertex_color_triangle_pipeline(
+        // Create pipeline for uniform color
+        let (uniform_color_pipeline, color_bind_group_layout) =
+            Self::create_uniform_color_pipeline(
                 &self.device,
                 &self.config,
                 &self.shader_manager,
             )?;
 
-        // Zapisz pipeline'y
+        // Create pipeline for vertex color
+        let vertex_color_pipeline =
+            Self::create_vertex_color_pipeline(
+                &self.device,
+                &self.config,
+                &self.shader_manager,
+            )?;
+
+        // Save pipelines and bind group layout
         self.uniform_color_pipeline = Some(uniform_color_pipeline);
-        self.uniform_color_vertex_buffer = Some(uniform_color_vertex_buffer);
+        self.color_bind_group_layout = Some(color_bind_group_layout);
         self.vertex_color_pipeline = Some(vertex_color_pipeline);
-        self.vertex_color_vertex_buffer = Some(vertex_color_vertex_buffer);
 
         Ok(())
     }
 
-    fn render(&mut self) -> Result<()> {
-        self.render().map_err(|e| match e {
+    fn render(&mut self, scene: &crate::scene::Scene) -> Result<()> {
+        self.render(scene).map_err(|e| match e {
             wgpu::SurfaceError::Lost | wgpu::SurfaceError::Outdated => {
                 RendererError::Surface("Surface lost or outdated - resize required".to_string())
             }

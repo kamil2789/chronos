@@ -33,7 +33,7 @@ pub enum ShaderId {
 
 pub trait Renderer {
     fn compile_all_shaders(&mut self) -> Result<()>;
-    fn render(&mut self) -> Result<()>;
+    fn render(&mut self, scene: &crate::scene::Scene) -> Result<()>;
     fn resize(&mut self, width: u32, height: u32);
     fn set_background_color(&mut self, color: &RGBA);
 }

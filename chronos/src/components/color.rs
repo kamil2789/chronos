@@ -43,6 +43,14 @@ impl RGBA {
         }
     }
 
+    pub fn red() -> Self {
+        Self::from_hex(0xFF_00_00_FF)
+    }
+
+    pub fn green() -> Self {
+        Self::from_hex(0x00_FF_00_FF)
+    }
+
     #[must_use]
     pub fn from_hex(hex: u32) -> Self {
         let bytes = hex.to_be_bytes();
