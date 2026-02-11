@@ -9,7 +9,7 @@ use winit::window::{Window, WindowId};
 
 use crate::configs::EngineConfig;
 use crate::game_engine::game_loop::GameLoop;
-use crate::renderer::{Renderer, init_render};
+use crate::renderer::{Renderer, RendererError, init_render};
 use crate::scene::Scene;
 
 pub type Result<T> = std::result::Result<T, EngineError>;
@@ -20,6 +20,8 @@ pub enum EngineError {
     WindowError(String),
     #[error("Event loop error: {0}")]
     EventLoopError(#[from] winit::error::EventLoopError),
+    #[error("Renderer initialization error: {0}")]
+    RendererInitialization(#[from] RendererError),
 }
 
 #[derive(Clone)]
@@ -101,30 +103,25 @@ impl ChronosEngine {
             renderer.resize(width, height);
         }
     }
+
+    fn init_start(&mut self, event_loop: &ActiveEventLoop) -> Result<()> {
+        let window = self.create_window(event_loop)?;
+        let mut renderer = init_render(window.clone(), &self.config.renderer_type)?;
+        
+        renderer.compile_shaders()?;
+        renderer.build_pipelines()?;
+
+        self.window = Some(window);
+        self.renderer = Some(renderer);
+        Ok(())
+    }
 }
 
 impl ApplicationHandler for ChronosEngine {
     // run after event_loop.run_app is called
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
-        if let Ok(window) = self.create_window(event_loop) {
-            match init_render(window.clone(), &self.config.renderer_type) {
-                Ok(mut renderer) => {
-                    if let Err(e) = renderer.compile_all_shaders() {
-                        eprintln!("Failed to compile shaders: {e}");
-                        event_loop.exit();
-                        return;
-                    }
-                    self.renderer = Some(renderer);
-                }
-                Err(e) => {
-                    eprintln!("Failed to initialize renderer: {e}");
-                    event_loop.exit();
-                    return;
-                }
-            }
-            self.window = Some(window);
-        } else {
-            eprintln!("Failed to create window.");
+        if let Err(e) = self.init_start(event_loop) {
+            eprintln!("Failed to initialize engine: {e}");
             event_loop.exit();
         }
     }

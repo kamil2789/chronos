@@ -1,5 +1,7 @@
 mod shaders;
 
+use std::cell::RefCell;
+use std::collections::HashMap;
 use std::sync::Arc;
 use wgpu::MemoryHints;
 use wgpu::util::DeviceExt;
@@ -10,6 +12,17 @@ use crate::components::color::RGBA;
 use crate::renderer::Renderer;
 use crate::renderer::{RendererError, Result};
 use crate::scene::Scene;
+
+/// Cache for entity rendering resources to avoid recreating buffers every frame
+#[allow(dead_code)]
+struct EntityRenderCache {
+    vertex_buffer: wgpu::Buffer,
+    vertex_count: u32,
+    // For uniform color pipeline
+    // color_buffer must stay alive for bind_group to work
+    color_buffer: Option<wgpu::Buffer>,
+    color_bind_group: Option<wgpu::BindGroup>,
+}
 
 pub struct WgpuRenderer {
     surface: wgpu::Surface<'static>,
@@ -23,6 +36,9 @@ pub struct WgpuRenderer {
     color_bind_group_layout: Option<wgpu::BindGroupLayout>,
     // Pipeline for rendering with per-vertex colors
     vertex_color_pipeline: Option<wgpu::RenderPipeline>,
+    // Cache for entity buffers to avoid recreating them every frame
+    // Using RefCell for interior mutability to allow caching during rendering
+    entity_cache: RefCell<HashMap<usize, EntityRenderCache>>,
 }
 
 impl WgpuRenderer {
@@ -48,10 +64,10 @@ impl WgpuRenderer {
             uniform_color_pipeline: None,
             color_bind_group_layout: None,
             vertex_color_pipeline: None,
+            entity_cache: RefCell::new(HashMap::new()),
         })
     }
 
-    //Need refactor
     pub fn render(&mut self, scene: &Scene) -> std::result::Result<(), wgpu::SurfaceError> {
         let output = self.surface.get_current_texture()?;
         let view = output
@@ -93,12 +109,12 @@ impl WgpuRenderer {
                     if color.is_uniform() {
                         // Render with uniform color
                         if let Some(pipeline) = &self.uniform_color_pipeline {
-                            self.render_entity_with_uniform_color(&mut render_pass, pipeline, shape, color);
+                            self.render_entity_with_uniform_color(&mut render_pass, pipeline, entity_id, shape, color);
                         }
                     } else {
                         // Render with per-vertex colors
                         if let Some(pipeline) = &self.vertex_color_pipeline {
-                            self.render_entity_with_vertex_color(&mut render_pass, pipeline, shape, color);
+                            self.render_entity_with_vertex_color(&mut render_pass, pipeline, entity_id, shape, color);
                         }
                     }
                 }
@@ -341,6 +357,7 @@ impl WgpuRenderer {
         &self,
         render_pass: &mut wgpu::RenderPass,
         pipeline: &wgpu::RenderPipeline,
+        entity_id: usize,
         shape: &crate::components::shape::Shape,
         color: &crate::components::color::Color,
     ) {
@@ -355,28 +372,45 @@ impl WgpuRenderer {
                 return;
             }
 
-            // Build interleaved vertex buffer: [pos.x, pos.y, pos.z, color.r, color.g, color.b, color.a, ...]
-            let mut vertex_data: Vec<f32> = Vec::with_capacity(vertices.len() * 7);
-            for (i, vertex) in vertices.iter().enumerate() {
-                vertex_data.push(vertex.x);
-                vertex_data.push(vertex.y);
-                vertex_data.push(vertex.z);
-                vertex_data.push(vertex_colors[i * 4]);
-                vertex_data.push(vertex_colors[i * 4 + 1]);
-                vertex_data.push(vertex_colors[i * 4 + 2]);
-                vertex_data.push(vertex_colors[i * 4 + 3]);
-            }
+            // Try to get cached buffer, or create new one
+            {
+                let mut cache_map = self.entity_cache.borrow_mut();
+                cache_map.entry(entity_id).or_insert_with(|| {
+                    // Build interleaved vertex buffer: [pos.x, pos.y, pos.z, color.r, color.g, color.b, color.a, ...]
+                    let mut vertex_data: Vec<f32> = Vec::with_capacity(vertices.len() * 7);
+                    for (i, vertex) in vertices.iter().enumerate() {
+                        vertex_data.push(vertex.x);
+                        vertex_data.push(vertex.y);
+                        vertex_data.push(vertex.z);
+                        vertex_data.push(vertex_colors[i * 4]);
+                        vertex_data.push(vertex_colors[i * 4 + 1]);
+                        vertex_data.push(vertex_colors[i * 4 + 2]);
+                        vertex_data.push(vertex_colors[i * 4 + 3]);
+                    }
 
-            // Create vertex buffer
-            let vertex_buffer = self.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("Vertex Color Vertex Buffer"),
-                contents: bytemuck::cast_slice(&vertex_data),
-                usage: wgpu::BufferUsages::VERTEX,
-            });
+                    // Create vertex buffer
+                    let vertex_buffer = self.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                        label: Some("Vertex Color Vertex Buffer"),
+                        contents: bytemuck::cast_slice(&vertex_data),
+                        usage: wgpu::BufferUsages::VERTEX,
+                    });
+
+                    EntityRenderCache {
+                        vertex_buffer,
+                        vertex_count: vertices.len() as u32,
+                        color_buffer: None,
+                        color_bind_group: None,
+                    }
+                });
+            }
+            
+            // Now borrow immutably to use the cache
+            let cache_borrow = self.entity_cache.borrow();
+            let cache = cache_borrow.get(&entity_id).unwrap();
 
             render_pass.set_pipeline(pipeline);
-            render_pass.set_vertex_buffer(0, vertex_buffer.slice(..));
-            render_pass.draw(0..vertices.len() as u32, 0..1);
+            render_pass.set_vertex_buffer(0, cache.vertex_buffer.slice(..));
+            render_pass.draw(0..cache.vertex_count, 0..1);
         }
     }
 
@@ -384,65 +418,90 @@ impl WgpuRenderer {
         &self,
         render_pass: &mut wgpu::RenderPass,
         pipeline: &wgpu::RenderPipeline,
+        entity_id: usize,
         shape: &crate::components::shape::Shape,
         color: &crate::components::color::Color,
     ) {
-        // Konwertuj Vec3 do [f32; 3] (x, y, z)
-        let vertices: Vec<[f32; 3]> = shape
-            .get_vertices()
-            .iter()
-            .map(|v| [v.x, v.y, v.z])
-            .collect();
-
-        // Create vertex buffer for this specific shape
-        let vertex_buffer = self.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-            label: Some("Entity Vertex Buffer"),
-            contents: bytemuck::cast_slice(&vertices),
-            usage: wgpu::BufferUsages::VERTEX,
-        });
-
         // Get color from component and prepare uniform buffer
         if let (Some(rgba), Some(layout)) = (color.get_uniform_color(), &self.color_bind_group_layout) {
-            let wgpu_color: wgpu::Color = rgba.into();
-            let color_data: [f32; 4] = [
-                wgpu_color.r as f32,
-                wgpu_color.g as f32,
-                wgpu_color.b as f32,
-                wgpu_color.a as f32,
-            ];
+            // Try to get cached resources, or create new ones
+            {
+                let mut cache_map = self.entity_cache.borrow_mut();
+                cache_map.entry(entity_id).or_insert_with(|| {
+                    // Konwertuj Vec3 do [f32; 3] (x, y, z)
+                    let vertices: Vec<[f32; 3]> = shape
+                        .get_vertices()
+                        .iter()
+                        .map(|v| [v.x, v.y, v.z])
+                        .collect();
 
-            // Create uniform buffer for color
-            let color_buffer = self.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                label: Some("Color Uniform Buffer"),
-                contents: bytemuck::cast_slice(&color_data),
-                usage: wgpu::BufferUsages::UNIFORM,
-            });
+                    // Create vertex buffer for this specific shape
+                    let vertex_buffer = self.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                        label: Some("Entity Vertex Buffer"),
+                        contents: bytemuck::cast_slice(&vertices),
+                        usage: wgpu::BufferUsages::VERTEX,
+                    });
 
-            // Create bind group
-            let color_bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
-                label: Some("Color Bind Group"),
-                layout,
-                entries: &[wgpu::BindGroupEntry {
-                    binding: 0,
-                    resource: color_buffer.as_entire_binding(),
-                }],
-            });
+                    let vertex_count = vertices.len() as u32;
+
+                    let wgpu_color: wgpu::Color = rgba.into();
+                    let color_data: [f32; 4] = [
+                        wgpu_color.r as f32,
+                        wgpu_color.g as f32,
+                        wgpu_color.b as f32,
+                        wgpu_color.a as f32,
+                    ];
+
+                    // Create uniform buffer for color
+                    let color_buffer = self.device.create_buffer_init(&wgpu::util::BufferInitDescriptor {
+                        label: Some("Color Uniform Buffer"),
+                        contents: bytemuck::cast_slice(&color_data),
+                        usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+                    });
+
+                    // Create bind group
+                    let color_bind_group = self.device.create_bind_group(&wgpu::BindGroupDescriptor {
+                        label: Some("Color Bind Group"),
+                        layout,
+                        entries: &[wgpu::BindGroupEntry {
+                            binding: 0,
+                            resource: color_buffer.as_entire_binding(),
+                        }],
+                    });
+
+                    EntityRenderCache {
+                        vertex_buffer,
+                        vertex_count,
+                        color_buffer: Some(color_buffer),
+                        color_bind_group: Some(color_bind_group),
+                    }
+                });
+            }
+            
+            // Now borrow immutably to use the cache
+            let cache_borrow = self.entity_cache.borrow();
+            let cache = cache_borrow.get(&entity_id).unwrap();
 
             render_pass.set_pipeline(pipeline);
-            render_pass.set_bind_group(0, &color_bind_group, &[]);
-            render_pass.set_vertex_buffer(0, vertex_buffer.slice(..));
-            render_pass.draw(0..vertices.len() as u32, 0..1);
+            if let Some(bind_group) = &cache.color_bind_group {
+                render_pass.set_bind_group(0, bind_group, &[]);
+            }
+            render_pass.set_vertex_buffer(0, cache.vertex_buffer.slice(..));
+            render_pass.draw(0..cache.vertex_count, 0..1);
         }
     }
 }
 
 impl Renderer for WgpuRenderer {
-    fn compile_all_shaders(&mut self) -> Result<()> {
-        // Compile shaders
+    fn compile_shaders(&mut self) -> Result<()> {
+        // Compile shader source code into shader modules
         self.shader_manager.compile_all(&self.device).map_err(|e| {
             RendererError::Initialization(format!("Failed to compile shaders: {e}"))
         })?;
+        Ok(())
+    }
 
+    fn build_pipelines(&mut self) -> Result<()> {
         // Create pipeline for uniform color
         let (uniform_color_pipeline, color_bind_group_layout) =
             Self::create_uniform_color_pipeline(
