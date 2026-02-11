@@ -6,3 +6,4 @@ edition = "2024"
 [dependencies]
 chronos = { path = "../chronos" }
 winit = "0.30.12"
+glam = "0.30.1"

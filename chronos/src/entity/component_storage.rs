@@ -117,6 +117,14 @@ impl ComponentStorage {
         let storage = self.storages.get(&type_id)?;
         storage.as_any().downcast_ref::<SparseSet<T>>()
     }
+
+    pub fn get_all_entities_with_component<T: 'static>(&self) -> Vec<usize> {
+        if let Some(sparse_set) = self.get_sparse_set::<T>() {
+            sparse_set.get_all_entities()
+        } else {
+            Vec::new()
+        }
+    }
 }
 
 impl Default for ComponentStorage {
@@ -189,6 +197,10 @@ impl<T> SparseSet<T> {
             return Some(*dense_index);
         }
         None
+    }
+
+    pub fn get_all_entities(&self) -> Vec<usize> {
+        self.entities.clone()
     }
 }
 

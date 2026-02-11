@@ -256,6 +256,7 @@ name = "chronos"
 version = "0.1.0"
 dependencies = [
  "approx",
+ "bytemuck",
  "glam",
  "pollster",
  "raw-window-handle",
@@ -1443,6 +1444,7 @@ name = "sandbox"
 version = "0.1.0"
 dependencies = [
  "chronos",
+ "glam",
  "winit",
 ]
 

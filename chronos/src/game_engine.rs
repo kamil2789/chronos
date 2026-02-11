@@ -7,11 +7,10 @@ use winit::event::WindowEvent;
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
 use winit::window::{Window, WindowId};
 
-use crate::components::color::RGBA;
 use crate::configs::EngineConfig;
 use crate::game_engine::game_loop::GameLoop;
-use crate::renderer::shader_source::{ShaderManager, ShaderSource};
-use crate::renderer::{Renderer, init_render};
+use crate::renderer::{Renderer, RendererError, init_render};
+use crate::scene::Scene;
 
 pub type Result<T> = std::result::Result<T, EngineError>;
 
@@ -21,6 +20,8 @@ pub enum EngineError {
     WindowError(String),
     #[error("Event loop error: {0}")]
     EventLoopError(#[from] winit::error::EventLoopError),
+    #[error("Renderer initialization error: {0}")]
+    RendererInitialization(#[from] RendererError),
 }
 
 #[derive(Clone)]
@@ -31,8 +32,8 @@ pub enum RendererType {
 pub struct ChronosEngine {
     window: Option<Arc<winit::window::Window>>,
     renderer: Option<Box<dyn Renderer>>,
-    shader_manager: ShaderManager,
     config: EngineConfig,
+    scene: Scene,
 }
 
 impl ChronosEngine {
@@ -42,8 +43,8 @@ impl ChronosEngine {
         Self {
             window: None,
             renderer: None,
-            shader_manager: ShaderManager::default(),
             config,
+            scene: Scene::default(),
         }
     }
 
@@ -59,16 +60,8 @@ impl ChronosEngine {
         Ok(())
     }
 
-    /// Loads a shader into the engine.
-    pub fn load_shader(&mut self, name: &str, shader_source: &ShaderSource) {
-        self.shader_manager
-            .register_from_source(name, shader_source);
-    }
-
-    pub fn set_background_color(&mut self, color: &RGBA) {
-        if let Some(renderer) = &mut self.renderer {
-            renderer.set_background_color(color);
-        }
+    pub fn register_scene(&mut self, scene: Scene) {
+        self.scene = scene;
     }
 
     fn create_window(&mut self, event_loop: &ActiveEventLoop) -> Result<Arc<Window>> {
@@ -95,7 +88,7 @@ impl ChronosEngine {
     fn on_redraw_requested(&mut self) {
         if let Some(window) = &self.window {
             if let Some(renderer) = &mut self.renderer {
-                GameLoop::main_frame(renderer.as_mut(), window);
+                GameLoop::main_frame(renderer.as_mut(), window, &self.scene);
             }
             window.request_redraw();
         }
@@ -110,22 +103,25 @@ impl ChronosEngine {
             renderer.resize(width, height);
         }
     }
+
+    fn init_start(&mut self, event_loop: &ActiveEventLoop) -> Result<()> {
+        let window = self.create_window(event_loop)?;
+        let mut renderer = init_render(window.clone(), &self.config.renderer_type)?;
+
+        renderer.compile_shaders()?;
+        renderer.build_pipelines()?;
+
+        self.window = Some(window);
+        self.renderer = Some(renderer);
+        Ok(())
+    }
 }
 
 impl ApplicationHandler for ChronosEngine {
     // run after event_loop.run_app is called
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
-        if let Ok(window) = self.create_window(event_loop) {
-            match init_render(window.clone(), &self.config.renderer_type) {
-                Ok(renderer) => self.renderer = Some(renderer),
-                Err(e) => {
-                    eprintln!("Failed to initialize renderer: {e}");
-                    event_loop.exit();
-                }
-            }
-            self.window = Some(window);
-        } else {
-            eprintln!("Failed to create window.");
+        if let Err(e) = self.init_start(event_loop) {
+            eprintln!("Failed to initialize engine: {e}");
             event_loop.exit();
         }
     }
