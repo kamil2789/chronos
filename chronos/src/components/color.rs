@@ -43,10 +43,12 @@ impl RGBA {
         }
     }
 
+    #[must_use]
     pub fn red() -> Self {
         Self::from_hex(0xFF_00_00_FF)
     }
 
+    #[must_use]
     pub fn green() -> Self {
         Self::from_hex(0x00_FF_00_FF)
     }
@@ -71,6 +73,16 @@ impl RGBA {
     #[must_use]
     pub fn get(&self) -> (u8, u8, u8, f32) {
         (self.rgb.x, self.rgb.y, self.rgb.z, self.alpha)
+    }
+
+    #[must_use]
+    pub fn to_normalized_f32_array(&self) -> [f32; 4] {
+        [
+            f32::from(self.rgb.x) / 255.0,
+            f32::from(self.rgb.y) / 255.0,
+            f32::from(self.rgb.z) / 255.0,
+            self.alpha,
+        ]
     }
 }
 
@@ -147,6 +159,30 @@ mod tests {
     fn test_rgba_empty() {
         let empty = RGBA::empty();
         assert_eq!(empty.get(), (0, 0, 0, 1.0));
+    }
+
+    #[test]
+    fn test_rgba_to_normalized_f32_array() {
+        let white = RGBA::new(255, 255, 255, 1.0);
+        let normalized = white.to_normalized_f32_array();
+        assert_eq!(normalized, [1.0, 1.0, 1.0, 1.0]);
+
+        let red = RGBA::new(255, 0, 0, 0.5);
+        let normalized = red.to_normalized_f32_array();
+        assert_eq!(normalized, [1.0, 0.0, 0.0, 0.5]);
+
+        let gray = RGBA::new(128, 128, 128, 1.0);
+        let normalized = gray.to_normalized_f32_array();
+        assert_eq!(normalized[0], 128.0 / 255.0);
+        assert_eq!(normalized[1], 128.0 / 255.0);
+        assert_eq!(normalized[2], 128.0 / 255.0);
+        assert_eq!(normalized[3], 1.0);
+
+        let color = RGBA::from_hex(0xAB_CD_EF_80);
+        let normalized = color.to_normalized_f32_array();
+        for &value in &normalized[..3] {
+            assert!(value >= 0.0 && value <= 1.0, "Value {} out of range", value);
+        }
     }
 
     #[test]

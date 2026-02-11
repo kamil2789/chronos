@@ -17,7 +17,7 @@ impl ShaderManager {
         self.shaders_modules.get(name)
     }
 
-    pub fn compile_all(&mut self, device: &wgpu::Device) -> Result<(), String> {
+    pub fn compile_all(&mut self, device: &wgpu::Device) {
         for (name, source) in &self.shaders_src {
             let shader_module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
                 label: Some(name),
@@ -25,7 +25,6 @@ impl ShaderManager {
             });
             self.shaders_modules.insert(name.clone(), shader_module);
         }
-        Ok(())
     }
 }
 

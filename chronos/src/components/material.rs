@@ -13,6 +13,7 @@ pub struct Material {
 }
 
 impl Material {
+    #[must_use]
     pub fn new(shader: ShaderType, color: RGBA) -> Self {
         Material {
             shader,
@@ -20,6 +21,7 @@ impl Material {
         }
     }
 
+    #[must_use]
     pub fn new_with_uniform_color(color: RGBA) -> Self {
         Material {
             shader: ShaderType::UniformColor,
@@ -27,6 +29,7 @@ impl Material {
         }
     }
 
+    #[must_use]
     pub fn new_with_vertex_color() -> Self {
         Material {
             shader: ShaderType::VertexColor,
@@ -34,6 +37,7 @@ impl Material {
         }
     }
 
+    #[must_use]
     pub fn new_with_custom_shader(shader_name: &str) -> Self {
         Material {
             shader: ShaderType::Custom(shader_name.into()),
@@ -41,6 +45,7 @@ impl Material {
         }
     }
 
+    #[must_use]
     pub fn shader_name(&self) -> &str {
         match &self.shader {
             ShaderType::UniformColor => "uniform_color",
@@ -50,6 +55,7 @@ impl Material {
         }
     }
 
+    #[must_use]
     pub fn get_color(&self) -> Option<&RGBA> {
         self.color.as_ref()
     }

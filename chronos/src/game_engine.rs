@@ -107,7 +107,7 @@ impl ChronosEngine {
     fn init_start(&mut self, event_loop: &ActiveEventLoop) -> Result<()> {
         let window = self.create_window(event_loop)?;
         let mut renderer = init_render(window.clone(), &self.config.renderer_type)?;
-        
+
         renderer.compile_shaders()?;
         renderer.build_pipelines()?;
 

@@ -67,12 +67,17 @@ impl EntityManager {
         }
     }
 
-    /// Returns all entities that have both Shape and Color components
+    #[must_use]
     pub fn get_entities_with_shape_and_color(&self) -> Vec<usize> {
-        let shape_entities = self.components.get_all_entities_with_component::<crate::components::shape::Shape>();
-        let color_entities = self.components.get_all_entities_with_component::<crate::components::color::Color>();
-        
-        shape_entities.into_iter()
+        let shape_entities = self
+            .components
+            .get_all_entities_with_component::<crate::components::shape::Shape>();
+        let color_entities = self
+            .components
+            .get_all_entities_with_component::<crate::components::color::Color>();
+
+        shape_entities
+            .into_iter()
             .filter(|entity_id| color_entities.contains(entity_id))
             .collect()
     }
