@@ -1,3 +1,4 @@
+mod render_loop;
 mod shaders;
 
 use std::cell::RefCell;
@@ -8,7 +9,9 @@ use wgpu::util::DeviceExt;
 use winit::dpi::PhysicalSize;
 use winit::window::Window;
 
-use crate::components::color::RGBA;
+use crate::components::color::{Color, RGBA};
+use crate::components::shape::Shape;
+use crate::entity;
 use crate::renderer::Renderer;
 use crate::renderer::{RendererError, Result};
 use crate::scene::Scene;
@@ -69,43 +72,38 @@ impl WgpuRenderer {
     }
 
     pub fn render(&mut self, scene: &Scene) -> std::result::Result<(), wgpu::SurfaceError> {
-        let output = self.surface.get_current_texture()?;
-        let view = output
+        let current_frame = self.surface.get_current_texture()?;
+        let frame_view = current_frame
             .texture
             .create_view(&wgpu::TextureViewDescriptor::default());
 
-        let mut encoder = self
-            .device
-            .create_command_encoder(&wgpu::CommandEncoderDescriptor {
-                label: Some("Render Encoder"),
-            });
+        let mut frame_commands =
+            self.device
+                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                    label: Some("Render Encoder"),
+                });
 
         {
-            let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+            let color_attachment = wgpu::RenderPassColorAttachment {
+                view: &frame_view,
+                resolve_target: None,
+                ops: wgpu::Operations {
+                    load: wgpu::LoadOp::Clear((&self.background_color).into()),
+                    store: wgpu::StoreOp::Store,
+                },
+                depth_slice: None,
+            };
+            let mut render_pass = frame_commands.begin_render_pass(&wgpu::RenderPassDescriptor {
                 label: Some("Render Pass"),
-                color_attachments: &[Some(wgpu::RenderPassColorAttachment {
-                    view: &view,
-                    resolve_target: None,
-                    ops: wgpu::Operations {
-                        load: wgpu::LoadOp::Clear((&self.background_color).into()),
-                        store: wgpu::StoreOp::Store,
-                    },
-                    depth_slice: None,
-                })],
-                depth_stencil_attachment: None,
-                occlusion_query_set: None,
-                timestamp_writes: None,
-                multiview_mask: None,
+                color_attachments: &[Some(color_attachment)],
+                ..Default::default()
             });
 
-            // Get all entities with Shape and Color components
-            let entities = scene.entity_manager.get_entities_with_shape_and_color();
+            let entities = entity::query_entities!(scene.entity_manager, Shape, Color);
 
             for entity_id in entities {
                 if let (Some(shape), Some(color)) = (
-                    scene
-                        .entity_manager
-                        .get_component::<crate::components::shape::Shape>(entity_id),
+                    scene.entity_manager.get_component::<Shape>(entity_id),
                     scene
                         .entity_manager
                         .get_component::<crate::components::color::Color>(entity_id),
@@ -137,8 +135,8 @@ impl WgpuRenderer {
             }
         }
 
-        self.queue.submit(std::iter::once(encoder.finish()));
-        output.present();
+        self.queue.submit(std::iter::once(frame_commands.finish()));
+        current_frame.present();
 
         Ok(())
     }

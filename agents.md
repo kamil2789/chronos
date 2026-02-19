@@ -1,0 +1,1 @@
+* The engine is currently in a very early stage of development. The absence of certain features, or their incomplete implementation, is not intentional — it simply reflects that development is still ongoing.

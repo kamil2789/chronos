@@ -4,9 +4,6 @@ use wgpu::{ShaderModule, ShaderSource};
 
 pub type ShaderName = String;
 
-pub static UNIFORM_COLOR_WGSL: &str = include_str!("shaders/uniform_color.wgsl");
-pub static VERTEX_COLOR_WGSL: &str = include_str!("shaders/vertex_color.wgsl");
-
 pub struct ShaderManager {
     shaders_src: HashMap<ShaderName, ShaderSource<'static>>,
     shaders_modules: HashMap<ShaderName, ShaderModule>,
@@ -28,19 +25,26 @@ impl ShaderManager {
     }
 }
 
+macro_rules! shaders_src {
+    ($($name:literal => $file:literal),* $(,)?) => {
+        HashMap::from([
+            $(
+                (
+                    $name.to_string(),
+                    ShaderSource::Wgsl(include_str!(concat!("shaders/", $file)).into()),
+                ),
+            )*
+        ])
+    };
+}
+
 impl Default for ShaderManager {
     fn default() -> Self {
-        let mut shaders_src = HashMap::new();
-        shaders_src.insert(
-            "uniform_color".to_string(),
-            ShaderSource::Wgsl(UNIFORM_COLOR_WGSL.into()),
-        );
-        shaders_src.insert(
-            "vertex_color".to_string(),
-            ShaderSource::Wgsl(VERTEX_COLOR_WGSL.into()),
-        );
         ShaderManager {
-            shaders_src,
+            shaders_src: shaders_src! {
+                "uniform_color" => "uniform_color.wgsl",
+                "vertex_color"  => "vertex_color.wgsl",
+            },
             shaders_modules: HashMap::new(),
         }
     }
