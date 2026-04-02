@@ -1,8 +1,6 @@
+use crate::{components::color::RGBA, graphic_engine::RendererType, renderer::wgpu::WgpuRenderer};
 use std::sync::Arc;
-
 use winit::window::Window;
-
-use crate::{components::color::RGBA, game_engine::RendererType, renderer::wgpu::WgpuRenderer};
 
 pub mod wgpu;
 
@@ -32,7 +30,6 @@ pub enum ShaderId {
 }
 
 pub trait Renderer {
-    fn compile_shaders(&mut self) -> Result<()>;
     fn build_pipelines(&mut self) -> Result<()>;
     fn render(&mut self, scene: &crate::scene::Scene) -> Result<()>;
     fn resize(&mut self, width: u32, height: u32);
@@ -42,15 +39,8 @@ pub trait Renderer {
 pub fn init_render(window: Arc<Window>, renderer_type: &RendererType) -> Result<Box<dyn Renderer>> {
     match renderer_type {
         RendererType::Wgpu => {
-            let render = match pollster::block_on(WgpuRenderer::new(window)) {
-                Ok(renderer) => Box::new(renderer),
-                Err(_) => {
-                    return Err(RendererError::Initialization(
-                        "Failed to initialize WGPU renderer".to_string(),
-                    ));
-                }
-            };
-            Ok(render)
+            let render = pollster::block_on(WgpuRenderer::new(window))?;
+            Ok(Box::new(render))
         }
     }
 }

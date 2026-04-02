@@ -55,7 +55,7 @@ impl WgpuRenderer {
         let config = Self::create_surface_config(&surface, &adapter, size);
         surface.configure(&device, &config);
 
-        let shader_manager = shaders::ShaderManager::default();
+        let shader_manager = shaders::ShaderManager::new(&device);
 
         Ok(Self {
             surface,
@@ -517,11 +517,6 @@ impl WgpuRenderer {
 }
 
 impl Renderer for WgpuRenderer {
-    fn compile_shaders(&mut self) -> Result<()> {
-        self.shader_manager.compile_all(&self.device);
-        Ok(())
-    }
-
     fn build_pipelines(&mut self) -> Result<()> {
         // Create pipeline for uniform color
         let (uniform_color_pipeline, color_bind_group_layout) =

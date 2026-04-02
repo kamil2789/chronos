@@ -1,6 +1,6 @@
 pub mod components;
 pub mod configs;
 pub mod entity;
-pub mod game_engine;
+pub mod graphic_engine;
 pub(crate) mod renderer;
 pub mod scene;

@@ -1,4 +1,4 @@
-use crate::game_engine::RendererType;
+use crate::graphic_engine::RendererType;
 
 pub struct EngineConfig {
     pub window: WindowConfig,

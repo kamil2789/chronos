@@ -8,7 +8,7 @@ use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
 use winit::window::{Window, WindowId};
 
 use crate::configs::EngineConfig;
-use crate::game_engine::game_loop::GameLoop;
+use crate::graphic_engine::game_loop::GameLoop;
 use crate::renderer::{Renderer, RendererError, init_render};
 use crate::scene::Scene;
 
@@ -108,7 +108,6 @@ impl ChronosEngine {
         let window = self.create_window(event_loop)?;
         let mut renderer = init_render(window.clone(), &self.config.renderer_type)?;
 
-        renderer.compile_shaders()?;
         renderer.build_pipelines()?;
 
         self.window = Some(window);
