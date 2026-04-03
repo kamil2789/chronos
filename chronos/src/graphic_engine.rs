@@ -20,8 +20,8 @@ pub enum EngineError {
     WindowError(String),
     #[error("Event loop error: {0}")]
     EventLoopError(#[from] winit::error::EventLoopError),
-    #[error("Renderer initialization error: {0}")]
-    RendererInitialization(#[from] RendererError),
+    #[error("Renderer error: {0}")]
+    RendererError(#[from] RendererError),
 }
 
 #[derive(Clone)]

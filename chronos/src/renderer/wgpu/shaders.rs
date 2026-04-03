@@ -2,6 +2,8 @@ use std::collections::HashMap;
 
 use wgpu::ShaderModule;
 
+use crate::renderer::{RendererError, Result};
+
 pub type ShaderName = String;
 
 static UNIFORM_COLOR_WGSL: &str = include_str!("shaders/uniform_color.wgsl");
@@ -17,17 +19,21 @@ pub struct ShaderManager {
 }
 
 impl ShaderManager {
-    pub fn new(device: &wgpu::Device) -> Self {
+    pub async fn new(device: &wgpu::Device) -> Result<Self> {
         let mut shaders_modules = HashMap::new();
         for (name, source) in SHADER_SOURCES {
+            let error_scope = device.push_error_scope(wgpu::ErrorFilter::Validation);
             let module = device.create_shader_module(wgpu::ShaderModuleDescriptor {
                 label: Some(name),
                 source: wgpu::ShaderSource::Wgsl(source.into()),
             });
+            if let Some(err) = error_scope.pop().await {
+                return Err(RendererError::Shader(format!("'{}': {}", name, err)));
+            }
             shaders_modules.insert(name.to_string(), module);
         }
 
-        Self { shaders_modules }
+        Ok(Self { shaders_modules })
     }
 
     pub fn get_shader(&self, name: &str) -> Option<&ShaderModule> {
