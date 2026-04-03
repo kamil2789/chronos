@@ -4,7 +4,7 @@ use chronos::{
         shape::Shape,
     },
     configs::EngineConfig,
-    game_engine::ChronosEngine,
+    graphic_engine::ChronosEngine,
     scene::Scene,
 };
 use glam::Vec3;

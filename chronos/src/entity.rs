@@ -67,21 +67,26 @@ impl EntityManager {
         }
     }
 
+    /// Returns all entity IDs that have a specific component type.
+    /// Use the `query_entities!` macro to query multiple components at once.
     #[must_use]
-    pub fn get_entities_with_shape_and_color(&self) -> Vec<usize> {
-        let shape_entities = self
-            .components
-            .get_all_entities_with_component::<crate::components::shape::Shape>();
-        let color_entities = self
-            .components
-            .get_all_entities_with_component::<crate::components::color::Color>();
-
-        shape_entities
-            .into_iter()
-            .filter(|entity_id| color_entities.contains(entity_id))
-            .collect()
+    pub fn get_entities_with<T: 'static>(&self) -> Vec<usize> {
+        self.components.get_all_entities_with_component::<T>()
     }
 }
+
+macro_rules! query_entities {
+    ($manager:expr, $first:ty $(, $rest:ty)*) => {{
+        #[allow(unused_mut)]
+        let mut result = $manager.get_entities_with::<$first>();
+        $(
+            let other = $manager.get_entities_with::<$rest>();
+            result.retain(|id| other.contains(id));
+        )*
+        result
+    }};
+}
+pub(crate) use query_entities;
 
 macro_rules! impl_component_bundle_for_tuple {
     ($($T:ident),+) => {
@@ -216,5 +221,46 @@ mod tests {
         let id = entity_manager.create_entity((shape.clone(),));
         assert!(entity_manager.entity_exists(id));
         assert!(!entity_manager.entity_exists(999));
+    }
+
+    #[test]
+    fn test_query_entities_macro() {
+        let mut entity_manager = EntityManager::new(10);
+
+        let shape1 = Shape::new_triangle(
+            Vec3::new(0.0, 0.0, 0.0),
+            Vec3::new(1.0, 0.0, 0.0),
+            Vec3::new(0.0, 1.0, 0.0),
+        );
+        let color1 = Color::Uniform(RGBA::default());
+        let id1 = entity_manager.create_entity((shape1.clone(), color1.clone()));
+
+        let shape2 = Shape::new_triangle(
+            Vec3::new(1.0, 1.0, 0.0),
+            Vec3::new(2.0, 1.0, 0.0),
+            Vec3::new(1.0, 2.0, 0.0),
+        );
+        let id2 = entity_manager.create_entity((shape2.clone(),));
+
+        let shape3 = Shape::new_triangle(
+            Vec3::new(2.0, 2.0, 0.0),
+            Vec3::new(3.0, 2.0, 0.0),
+            Vec3::new(2.0, 3.0, 0.0),
+        );
+        let color3 = Color::Uniform(RGBA::default());
+        let id3 = entity_manager.create_entity((shape3.clone(), color3.clone()));
+
+        // Query entities with both Shape and Color components
+        let entities_with_shape_and_color = query_entities!(entity_manager, Shape, Color);
+        assert_eq!(entities_with_shape_and_color.len(), 2);
+        assert!(entities_with_shape_and_color.contains(&id1));
+        assert!(entities_with_shape_and_color.contains(&id3));
+
+        // Query entities with only Shape component
+        let entities_with_shape_only = query_entities!(entity_manager, Shape);
+        assert_eq!(entities_with_shape_only.len(), 3);
+        assert!(entities_with_shape_only.contains(&id1));
+        assert!(entities_with_shape_only.contains(&id2));
+        assert!(entities_with_shape_only.contains(&id3));
     }
 }
