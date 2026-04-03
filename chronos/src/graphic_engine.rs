@@ -7,6 +7,8 @@ use winit::event::WindowEvent;
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
 use winit::window::{Window, WindowId};
 
+use tracing::{error, info};
+
 use crate::configs::EngineConfig;
 use crate::graphic_engine::game_loop::GameLoop;
 use crate::renderer::{Renderer, RendererError, init_render};
@@ -118,8 +120,10 @@ impl ApplicationHandler for ChronosEngine {
     // run after event_loop.run_app is called
     fn resumed(&mut self, event_loop: &ActiveEventLoop) {
         if let Err(e) = self.init_start(event_loop) {
-            eprintln!("Failed to initialize engine: {e}");
+            error!(err = %e, "Failed to initialize engine");
             event_loop.exit();
+        } else {
+            info!("Engine initialized successfully");
         }
     }
 

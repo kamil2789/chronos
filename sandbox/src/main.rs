@@ -8,10 +8,17 @@ use chronos::{
     scene::Scene,
 };
 use glam::Vec3;
+use tracing_subscriber::EnvFilter;
 
 fn main() {
+    tracing_subscriber::fmt()
+        .with_env_filter(
+            EnvFilter::try_from_default_env()
+                .unwrap_or_else(|_| EnvFilter::new("chronos=info,wgpu=error")),
+        )
+        .init();
+
     let mut engine = ChronosEngine::new(EngineConfig::default());
-    println!("Chronos Engine created successfully.");
 
     let mut scene = Scene::default();
 

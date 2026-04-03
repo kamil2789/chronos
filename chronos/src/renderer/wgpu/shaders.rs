@@ -28,7 +28,7 @@ impl ShaderManager {
                 source: wgpu::ShaderSource::Wgsl(source.into()),
             });
             if let Some(err) = error_scope.pop().await {
-                return Err(RendererError::Shader(format!("'{}': {}", name, err)));
+                return Err(RendererError::Shader(format!("'{name}': {err}")));
             }
             shaders_modules.insert(name.to_string(), module);
         }
