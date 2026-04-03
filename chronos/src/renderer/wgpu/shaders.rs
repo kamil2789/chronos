@@ -19,7 +19,7 @@ pub struct ShaderManager {
 }
 
 impl ShaderManager {
-    pub fn new(device: &wgpu::Device) -> Result<Self> {
+    pub async fn new(device: &wgpu::Device) -> Result<Self> {
         let mut shaders_modules = HashMap::new();
         for (name, source) in SHADER_SOURCES {
             let error_scope = device.push_error_scope(wgpu::ErrorFilter::Validation);
@@ -27,7 +27,7 @@ impl ShaderManager {
                 label: Some(name),
                 source: wgpu::ShaderSource::Wgsl(source.into()),
             });
-            if let Some(err) = pollster::block_on(error_scope.pop()) {
+            if let Some(err) = error_scope.pop().await {
                 return Err(RendererError::Shader(format!("'{}': {}", name, err)));
             }
             shaders_modules.insert(name.to_string(), module);

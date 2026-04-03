@@ -14,7 +14,7 @@ pub enum RendererError {
     Render(String),
     #[error("Surface error: {0}")]
     Surface(String),
-    #[error("Shader error in {0}")]
+    #[error("Shader error: {0}")]
     Shader(String),
 }
 

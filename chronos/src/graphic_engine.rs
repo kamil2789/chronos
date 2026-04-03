@@ -21,7 +21,7 @@ pub enum EngineError {
     #[error("Event loop error: {0}")]
     EventLoopError(#[from] winit::error::EventLoopError),
     #[error("Renderer error: {0}")]
-    RendererError(#[from] RendererError),
+    Renderer(#[from] RendererError),
 }
 
 #[derive(Clone)]
