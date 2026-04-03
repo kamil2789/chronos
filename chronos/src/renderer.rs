@@ -30,7 +30,6 @@ pub enum ShaderId {
 }
 
 pub trait Renderer {
-    fn build_pipelines(&mut self) -> Result<()>;
     fn render(&mut self, scene: &crate::scene::Scene) -> Result<()>;
     fn resize(&mut self, width: u32, height: u32);
     fn set_background_color(&mut self, color: &RGBA);
