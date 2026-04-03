@@ -8,20 +8,14 @@ pub type Result<T> = std::result::Result<T, RendererError>;
 
 #[derive(thiserror::Error, Debug)]
 pub enum RendererError {
-    /*
-    #[error("File could not be opened, path: {0}")]
-    ShaderSourceFile(String),
-    #[error("Shader compilation error: {0}")]
-    Compilation(String),
-    #[error("Shader link error: {0}")]
-    Link(String),
-    */
     #[error("Renderer initialization error: {0}")]
     Initialization(String),
     #[error("Render error: {0}")]
     Render(String),
     #[error("Surface error: {0}")]
     Surface(String),
+    #[error("Shader error in {0}")]
+    Shader(String),
 }
 
 #[allow(dead_code)]

@@ -26,7 +26,7 @@ pub struct WgpuRenderer {
 impl WgpuRenderer {
     pub async fn new(window: Arc<Window>) -> Result<Self> {
         let gpu_context = GpuContext::new(window).await?;
-        let shader_manager = shaders::ShaderManager::new(&gpu_context.device);
+        let shader_manager = shaders::ShaderManager::new(&gpu_context.device)?;
         let mut pipeline_manager = PipelineManager::new();
         pipeline_manager.build(&gpu_context.device, &gpu_context.config, &shader_manager)?;
 
