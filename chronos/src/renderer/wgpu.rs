@@ -1,18 +1,18 @@
+mod gpu_context;
 mod render_loop;
+mod renderer_impl;
 mod shaders;
 
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::sync::Arc;
-use wgpu::MemoryHints;
 use wgpu::util::DeviceExt;
-use winit::dpi::PhysicalSize;
 use winit::window::Window;
 
 use crate::components::color::{Color, RGBA};
 use crate::components::shape::Shape;
 use crate::entity;
-use crate::renderer::Renderer;
+use crate::renderer::wgpu::gpu_context::GpuContext;
 use crate::renderer::{RendererError, Result};
 use crate::scene::Scene;
 
@@ -28,10 +28,7 @@ struct EntityRenderCache {
 }
 
 pub struct WgpuRenderer {
-    surface: wgpu::Surface<'static>,
-    device: wgpu::Device,
-    queue: wgpu::Queue,
-    config: wgpu::SurfaceConfiguration,
+    gpu_context: GpuContext,
     shader_manager: shaders::ShaderManager,
     background_color: RGBA,
     // Pipeline for rendering with uniform color
@@ -46,22 +43,11 @@ pub struct WgpuRenderer {
 
 impl WgpuRenderer {
     pub async fn new(window: Arc<Window>) -> Result<Self> {
-        let gpu_instance = Self::create_gpu_instance();
-        let size = window.inner_size();
-        let surface = Self::create_surface(&gpu_instance, window)?;
-        let adapter = Self::create_adapter(&gpu_instance, &surface).await?;
-        let (device, queue) = Self::create_connection_with_gpu(&adapter).await?;
-
-        let config = Self::create_surface_config(&surface, &adapter, size);
-        surface.configure(&device, &config);
-
-        let shader_manager = shaders::ShaderManager::new(&device);
+        let gpu_context = GpuContext::new(window).await?;
+        let shader_manager = shaders::ShaderManager::new(&gpu_context.device);
 
         Ok(Self {
-            surface,
-            device,
-            queue,
-            config,
+            gpu_context,
             shader_manager,
             background_color: RGBA::default(),
             uniform_color_pipeline: None,
@@ -72,13 +58,14 @@ impl WgpuRenderer {
     }
 
     pub fn render(&mut self, scene: &Scene) -> std::result::Result<(), wgpu::SurfaceError> {
-        let current_frame = self.surface.get_current_texture()?;
+        let current_frame = self.gpu_context.surface.get_current_texture()?;
         let frame_view = current_frame
             .texture
             .create_view(&wgpu::TextureViewDescriptor::default());
 
         let mut frame_commands =
-            self.device
+            self.gpu_context
+                .device
                 .create_command_encoder(&wgpu::CommandEncoderDescriptor {
                     label: Some("Render Encoder"),
                 });
@@ -135,84 +122,12 @@ impl WgpuRenderer {
             }
         }
 
-        self.queue.submit(std::iter::once(frame_commands.finish()));
+        self.gpu_context
+            .queue
+            .submit(std::iter::once(frame_commands.finish()));
         current_frame.present();
 
         Ok(())
-    }
-
-    fn create_gpu_instance() -> wgpu::Instance {
-        wgpu::Instance::new(&wgpu::InstanceDescriptor {
-            backends: wgpu::Backends::PRIMARY,
-            ..Default::default()
-        })
-    }
-
-    fn create_surface(
-        gpu_instance: &wgpu::Instance,
-        window: Arc<Window>,
-    ) -> Result<wgpu::Surface<'static>> {
-        gpu_instance
-            .create_surface(window)
-            .map_err(|e| RendererError::Initialization(format!("Failed to create surface: {e}")))
-    }
-
-    fn create_surface_config(
-        surface: &wgpu::Surface,
-        adapter: &wgpu::Adapter,
-        size: PhysicalSize<u32>,
-    ) -> wgpu::SurfaceConfiguration {
-        let surface_caps = surface.get_capabilities(adapter);
-
-        let surface_format = surface_caps
-            .formats
-            .iter()
-            .copied()
-            .find(wgpu::TextureFormat::is_srgb)
-            .unwrap_or(surface_caps.formats[0]);
-
-        wgpu::SurfaceConfiguration {
-            usage: wgpu::TextureUsages::RENDER_ATTACHMENT,
-            format: surface_format,
-            width: size.width,
-            height: size.height,
-            present_mode: surface_caps.present_modes[0],
-            alpha_mode: surface_caps.alpha_modes[0],
-            desired_maximum_frame_latency: 2,
-            view_formats: vec![],
-        }
-    }
-
-    async fn create_adapter(
-        gpu_instance: &wgpu::Instance,
-        surface: &wgpu::Surface<'static>,
-    ) -> Result<wgpu::Adapter> {
-        gpu_instance
-            .request_adapter(&wgpu::RequestAdapterOptions {
-                power_preference: wgpu::PowerPreference::default(),
-                compatible_surface: Some(surface),
-                force_fallback_adapter: false,
-            })
-            .await
-            .map_err(|e| RendererError::Initialization(format!("Failed to find adapter: {e}")))
-    }
-
-    async fn create_connection_with_gpu(
-        adapter: &wgpu::Adapter,
-    ) -> Result<(wgpu::Device, wgpu::Queue)> {
-        adapter
-            .request_device(&wgpu::DeviceDescriptor {
-                label: Some("Chronos Device"),
-                required_features: wgpu::Features::empty(),
-                experimental_features: wgpu::ExperimentalFeatures::disabled(),
-                required_limits: wgpu::Limits::default(),
-                memory_hints: MemoryHints::default(),
-                trace: wgpu::Trace::Off,
-            })
-            .await
-            .map_err(|e| {
-                RendererError::Initialization(format!("Failed to create connection with GPU: {e}",))
-            })
     }
 
     // Pipeline for rendering with uniform color
@@ -409,13 +324,13 @@ impl WgpuRenderer {
                     }
 
                     // Create vertex buffer
-                    let vertex_buffer =
-                        self.device
-                            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                                label: Some("Vertex Color Vertex Buffer"),
-                                contents: bytemuck::cast_slice(&vertex_data),
-                                usage: wgpu::BufferUsages::VERTEX,
-                            });
+                    let vertex_buffer = self.gpu_context.device.create_buffer_init(
+                        &wgpu::util::BufferInitDescriptor {
+                            label: Some("Vertex Color Vertex Buffer"),
+                            contents: bytemuck::cast_slice(&vertex_data),
+                            usage: wgpu::BufferUsages::VERTEX,
+                        },
+                    );
 
                     EntityRenderCache {
                         vertex_buffer,
@@ -460,13 +375,13 @@ impl WgpuRenderer {
                         .collect();
 
                     // Create vertex buffer for this specific shape
-                    let vertex_buffer =
-                        self.device
-                            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                                label: Some("Entity Vertex Buffer"),
-                                contents: bytemuck::cast_slice(&vertices),
-                                usage: wgpu::BufferUsages::VERTEX,
-                            });
+                    let vertex_buffer = self.gpu_context.device.create_buffer_init(
+                        &wgpu::util::BufferInitDescriptor {
+                            label: Some("Entity Vertex Buffer"),
+                            contents: bytemuck::cast_slice(&vertices),
+                            usage: wgpu::BufferUsages::VERTEX,
+                        },
+                    );
 
                     let vertex_count = u32::try_from(vertices.len()).unwrap_or(0);
 
@@ -474,24 +389,26 @@ impl WgpuRenderer {
                     let color_data: [f32; 4] = rgba.to_normalized_f32_array();
 
                     // Create uniform buffer for color
-                    let color_buffer =
-                        self.device
-                            .create_buffer_init(&wgpu::util::BufferInitDescriptor {
-                                label: Some("Color Uniform Buffer"),
-                                contents: bytemuck::cast_slice(&color_data),
-                                usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
-                            });
+                    let color_buffer = self.gpu_context.device.create_buffer_init(
+                        &wgpu::util::BufferInitDescriptor {
+                            label: Some("Color Uniform Buffer"),
+                            contents: bytemuck::cast_slice(&color_data),
+                            usage: wgpu::BufferUsages::UNIFORM | wgpu::BufferUsages::COPY_DST,
+                        },
+                    );
 
                     // Create bind group
                     let color_bind_group =
-                        self.device.create_bind_group(&wgpu::BindGroupDescriptor {
-                            label: Some("Color Bind Group"),
-                            layout,
-                            entries: &[wgpu::BindGroupEntry {
-                                binding: 0,
-                                resource: color_buffer.as_entire_binding(),
-                            }],
-                        });
+                        self.gpu_context
+                            .device
+                            .create_bind_group(&wgpu::BindGroupDescriptor {
+                                label: Some("Color Bind Group"),
+                                layout,
+                                entries: &[wgpu::BindGroupEntry {
+                                    binding: 0,
+                                    resource: color_buffer.as_entire_binding(),
+                                }],
+                            });
 
                     EntityRenderCache {
                         vertex_buffer,
@@ -513,45 +430,5 @@ impl WgpuRenderer {
             render_pass.set_vertex_buffer(0, cache.vertex_buffer.slice(..));
             render_pass.draw(0..cache.vertex_count, 0..1);
         }
-    }
-}
-
-impl Renderer for WgpuRenderer {
-    fn build_pipelines(&mut self) -> Result<()> {
-        // Create pipeline for uniform color
-        let (uniform_color_pipeline, color_bind_group_layout) =
-            Self::create_uniform_color_pipeline(&self.device, &self.config, &self.shader_manager)?;
-
-        // Create pipeline for vertex color
-        let vertex_color_pipeline =
-            Self::create_vertex_color_pipeline(&self.device, &self.config, &self.shader_manager)?;
-
-        // Save pipelines and bind group layout
-        self.uniform_color_pipeline = Some(uniform_color_pipeline);
-        self.color_bind_group_layout = Some(color_bind_group_layout);
-        self.vertex_color_pipeline = Some(vertex_color_pipeline);
-
-        Ok(())
-    }
-
-    fn render(&mut self, scene: &crate::scene::Scene) -> Result<()> {
-        self.render(scene).map_err(|e| match e {
-            wgpu::SurfaceError::Lost | wgpu::SurfaceError::Outdated => {
-                RendererError::Surface("Surface lost or outdated - resize required".to_string())
-            }
-            _ => RendererError::Render(format!("Failed to render frame: {e}")),
-        })
-    }
-
-    fn resize(&mut self, width: u32, height: u32) {
-        if width > 0 && height > 0 {
-            self.config.width = width;
-            self.config.height = height;
-            self.surface.configure(&self.device, &self.config);
-        }
-    }
-
-    fn set_background_color(&mut self, color: &RGBA) {
-        self.background_color = color.clone();
     }
 }
