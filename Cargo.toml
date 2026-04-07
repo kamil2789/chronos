@@ -3,5 +3,8 @@ resolver = "3"
 
 members = [
     "chronos",
+    "graphic-tests",
     "sandbox"
 ]
+
+default-members = ["graphic-tests"]
