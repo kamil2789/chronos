@@ -1,3 +1,4 @@
+use tracing::error;
 use winit::window::Window;
 
 use crate::{
@@ -21,7 +22,7 @@ impl GameLoop {
                 renderer.resize(size.width, size.height);
             }
             Err(e) => {
-                eprintln!("Render error: {e}");
+                error!(err = %e, "Render error");
             }
         }
     }
