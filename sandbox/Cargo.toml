@@ -6,4 +6,6 @@ edition = "2024"
 [dependencies]
 chronos = { path = "../chronos" }
 winit = "0.30.12"
-glam = "0.30.1"
+glam = "0.32.1"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }

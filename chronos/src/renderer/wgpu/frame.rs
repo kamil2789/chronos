@@ -1,3 +1,4 @@
+use tracing::warn;
 use wgpu::util::DeviceExt;
 
 use crate::components::color::Color;
@@ -99,10 +100,10 @@ impl WgpuRenderer {
             let vertices = shape.get_vertices();
 
             if vertex_colors.len() != vertices.len() * 4 {
-                eprintln!(
-                    "Warning: vertex color count mismatch. Expected {} floats, got {}",
-                    vertices.len() * 4,
-                    vertex_colors.len()
+                warn!(
+                    expected = vertices.len() * 4,
+                    got = vertex_colors.len(),
+                    "Vertex color count mismatch"
                 );
                 return;
             }
