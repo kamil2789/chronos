@@ -10,12 +10,11 @@ pub struct Args {
     pub test_name: String,
 
     /// Execute tests for a specific graphic API
-    #[arg(value_enum, short, long, default_value_t = GraphicApi::All)]
+    #[arg(value_enum, short, long, default_value_t = GraphicApi::Wgpu)]
     pub graphic_api: GraphicApi,
 }
 
 #[derive(ValueEnum, Clone, Debug, PartialEq, Eq)]
 pub enum GraphicApi {
-    All,
     Wgpu,
 }

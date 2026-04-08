@@ -21,10 +21,9 @@ impl Renderer for WgpuRenderer {
         if width > 0 && height > 0 {
             self.gpu_context.width = width;
             self.gpu_context.height = height;
-            if let (Some(surface), Some(config)) = (
-                &self.gpu_context.surface,
-                &mut self.gpu_context.config,
-            ) {
+            if let (Some(surface), Some(config)) =
+                (&self.gpu_context.surface, &mut self.gpu_context.config)
+            {
                 config.width = width;
                 config.height = height;
                 surface.configure(&self.gpu_context.device, config);

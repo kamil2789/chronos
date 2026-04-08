@@ -1,14 +1,16 @@
 use std::path::Path;
 
-use chronos::graphic_engine::{HeadlessRenderer, RendererType};
+use chronos::{
+    configs::EngineConfig,
+    graphic_engine::{ChronosEngine, HeadlessRenderer, RendererType},
+};
 use image::{ImageBuffer, Rgba};
 
 use crate::{
-    args_parser::{Args, GraphicApi},
-    workspace::{self, prepare_working_directory},
+    args_parser::{Args, GraphicApi}, test_collector::collect_wgpu_tests, workspace::{self, prepare_working_directory}
 };
 
-mod basic_2d_geometries;
+pub(crate) mod basic_2d_geometries;
 
 const RENDER_WIDTH: u32 = 1280;
 const RENDER_HEIGHT: u32 = 720;
@@ -21,70 +23,63 @@ const PIXEL_FAIL_THRESHOLD_PCT: f64 = 0.01;
 pub fn run(args: &Args) {
     println!("Running graphic tests...");
     prepare_working_directory();
-
-    let renderer_types = match args.graphic_api {
-        GraphicApi::All | GraphicApi::Wgpu => vec![RendererType::Wgpu],
-    };
+    let mut engine = create_engine(args);
 
     let mut passed = 0u32;
     let mut failed = 0u32;
 
-    for renderer_type in &renderer_types {
-        if args.test_name == "All" || args.test_name == "two_triangles" {
-            if run_test("two_triangles", renderer_type, || {
-                basic_2d_geometries::two_triangles_scene()
-            }) {
-                passed += 1;
-            } else {
-                failed += 1;
-            }
-        }
+    let tests = collect_wgpu_tests();
+
+    for test_scene in tests {
+        engine.register_scene(test_scene);
     }
 
-    println!("\nResults: {passed} passed, {failed} failed");
-    if failed > 0 {
+    engine.start().expect("Failed to start engine");
+
+    let test_name = "2d_two_triangles";
+    if run_test(test_name, &mut engine) {
+        passed += 1;
+    } else {
+        failed += 1;
+    }
+
+     println!("\nTest summary: {passed} passed, {failed} failed");
+     if failed > 0 {
+         std::process::exit(1);
+    }
+
+    let result = run_test("2d_two_triangles", &mut engine);
+
+    println!("\nResults: {result}");
+    if !result {
         std::process::exit(1);
+    }
+}
+
+fn create_engine(args: &Args) -> ChronosEngine {
+    let renderer_type = get_render_type(args);
+    ChronosEngine::new(EngineConfig {
+        renderer_type,
+        headless: true,
+        ..Default::default()
+    })
+}
+
+fn get_render_type(args: &Args) -> RendererType {
+    match args.graphic_api {
+        GraphicApi::Wgpu => RendererType::Wgpu,
     }
 }
 
 /// Returns `true` if the test passed.
 fn run_test(
     test_name: &str,
-    renderer_type: &RendererType,
-    scene_fn: impl FnOnce() -> chronos::scene::Scene,
+    engine: &mut ChronosEngine
 ) -> bool {
-    let api_name = match renderer_type {
-        RendererType::Wgpu => "wgpu",
-    };
+    engine.set_current_scene(test_name);
+    let pixels = engine.run_one_frame().expect("Failed to run one frame");
 
-    let mut renderer = HeadlessRenderer::new(RENDER_WIDTH, RENDER_HEIGHT, renderer_type)
-        .expect("Failed to create headless renderer");
-
-    let scene = scene_fn();
-    let pixels = renderer
-        .render_to_buffer(&scene)
-        .expect("Failed to render scene");
-
-    let golden_path = format!(
-        "{}{}_{}.png",
-        workspace::GOLDEN_DIR,
-        test_name,
-        api_name
-    );
-
-    if !Path::new(&golden_path).exists() {
-        println!("  [{api_name}] {test_name} ... FAILED (golden image missing: {golden_path})");
-        // Save the actual output so QA can review and promote it to golden
-        let actual_path = format!(
-            "{}{}_{}_actual.png",
-            workspace::TEST_RESULTS_DIR,
-            test_name,
-            api_name
-        );
-        save_image(&actual_path, RENDER_WIDTH, RENDER_HEIGHT, &pixels);
-        println!("    -> Actual image saved to: {actual_path}");
-        return false;
-    }
+    let golden_path = format!("{}{}.png", workspace::GOLDEN_DIR, test_name);
 
     let golden_img = image::open(&golden_path)
         .expect("Failed to open golden image")
@@ -92,47 +87,60 @@ fn run_test(
     let golden_bytes = golden_img.as_raw();
 
     if pixels.len() != golden_bytes.len() {
-        println!("  [{api_name}] {test_name} ... FAILED (buffer size mismatch: actual={} vs golden={})", pixels.len(), golden_bytes.len());
+        println!(
+            "{test_name} ... FAILED (buffer size mismatch: actual={} vs golden={})",
+            pixels.len(),
+            golden_bytes.len()
+        );
         return false;
     }
 
-    let diff = compute_diff(&pixels, golden_bytes, RENDER_WIDTH, RENDER_HEIGHT, CHANNEL_TOLERANCE);
+    let diff = compute_diff(
+        &pixels,
+        golden_bytes,
+        RENDER_WIDTH,
+        RENDER_HEIGHT,
+        CHANNEL_TOLERANCE,
+    );
     let total = (RENDER_WIDTH * RENDER_HEIGHT) as usize;
     let fail_pct = diff.fail_count as f64 / total as f64 * 100.0;
 
     if diff.fail_count == 0 {
         if diff.within_tolerance_count > 0 {
             println!(
-                "  [{api_name}] {test_name} ... PASSED ({} pixels within tolerance ±{}, max delta: {})",
+                "{test_name} ... PASSED ({} pixels within tolerance ±{}, max delta: {})",
                 diff.within_tolerance_count, CHANNEL_TOLERANCE, diff.max_delta
             );
         } else {
-            println!("  [{api_name}] {test_name} ... PASSED");
+            println!("{test_name} ... PASSED");
         }
         true
     } else if fail_pct <= PIXEL_FAIL_THRESHOLD_PCT {
         println!(
-            "  [{api_name}] {test_name} ... PASSED ({} pixels beyond tolerance, {:.4}% <= threshold {:.2}%, max delta: {})",
+            "{test_name} ... PASSED ({} pixels beyond tolerance, {:.4}% <= threshold {:.2}%, max delta: {})",
             diff.fail_count, fail_pct, PIXEL_FAIL_THRESHOLD_PCT, diff.max_delta
         );
         true
     } else {
         println!(
-            "  [{api_name}] {test_name} ... FAILED ({} pixels beyond tolerance ±{}, {:.2}%, max channel delta: {})",
+            "{test_name} ... FAILED ({} pixels beyond tolerance ±{}, {:.2}%, max channel delta: {})",
             diff.fail_count, CHANNEL_TOLERANCE, fail_pct, diff.max_delta
         );
 
         let actual_path = format!(
-            "{}{}_{}_actual.png",
+            "{}{}_actual.png",
             workspace::TEST_RESULTS_DIR,
-            test_name,
-            api_name
+            test_name
         );
         let diff_path = format!(
-            "{}{}_{}_diff.png",
+            "{}{}_diff.png",
             workspace::TEST_RESULTS_DIR,
-            test_name,
-            api_name
+            test_name
+        );
+        let diff_path = format!(
+            "{}{}_diff.png",
+            workspace::TEST_RESULTS_DIR,
+            test_name
         );
         save_image(&actual_path, RENDER_WIDTH, RENDER_HEIGHT, &pixels);
         save_image(&diff_path, RENDER_WIDTH, RENDER_HEIGHT, &diff.diff_image);
@@ -220,8 +228,7 @@ fn save_image(path: &str, width: u32, height: u32, rgba_data: &[u8]) {
     if let Some(parent) = Path::new(path).parent() {
         std::fs::create_dir_all(parent).expect("Failed to create output directory");
     }
-    let img: ImageBuffer<Rgba<u8>, _> =
-        ImageBuffer::from_raw(width, height, rgba_data.to_vec())
-            .expect("Failed to create image buffer");
+    let img: ImageBuffer<Rgba<u8>, _> = ImageBuffer::from_raw(width, height, rgba_data.to_vec())
+        .expect("Failed to create image buffer");
     img.save(path).expect("Failed to save image");
 }

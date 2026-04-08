@@ -64,10 +64,7 @@ impl WgpuRenderer {
         Ok(())
     }
 
-    pub fn render_to_buffer(
-        &mut self,
-        scene: &Scene,
-    ) -> crate::renderer::Result<Vec<u8>> {
+    pub fn render_to_buffer(&mut self, scene: &Scene) -> crate::renderer::Result<Vec<u8>> {
         let width = self.gpu_context.width;
         let height = self.gpu_context.height;
         let texture_format = self.gpu_context.texture_format;
@@ -97,15 +94,15 @@ impl WgpuRenderer {
         let padded_bytes_per_row = (unpadded_bytes_per_row + align - 1) / align * align;
         let buffer_size = u64::from(padded_bytes_per_row * height);
 
-        let output_buffer =
-            self.gpu_context
-                .device
-                .create_buffer(&wgpu::BufferDescriptor {
-                    label: Some("Headless Output Buffer"),
-                    size: buffer_size,
-                    usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
-                    mapped_at_creation: false,
-                });
+        let output_buffer = self
+            .gpu_context
+            .device
+            .create_buffer(&wgpu::BufferDescriptor {
+                label: Some("Headless Output Buffer"),
+                size: buffer_size,
+                usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
+                mapped_at_creation: false,
+            });
 
         let mut encoder =
             self.gpu_context

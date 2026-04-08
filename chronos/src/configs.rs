@@ -3,6 +3,7 @@ use crate::graphic_engine::RendererType;
 pub struct EngineConfig {
     pub window: WindowConfig,
     pub renderer_type: RendererType,
+    pub headless: bool,
 }
 
 pub struct Resolution {
@@ -32,6 +33,7 @@ impl Default for EngineConfig {
         Self {
             window: WindowConfig::default(),
             renderer_type: RendererType::Wgpu,
+            headless: false,
         }
     }
 }

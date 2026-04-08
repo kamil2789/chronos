@@ -1,13 +1,15 @@
 mod game_loop;
 
+use std::collections::HashMap;
 use std::sync::Arc;
+use wgpu::hal::auxil::db;
 use winit::application::ApplicationHandler;
 use winit::dpi::LogicalSize;
 use winit::event::WindowEvent;
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
 use winit::window::{Window, WindowId};
 
-use tracing::{error, info};
+use tracing::{error, info, warn};
 
 use crate::configs::EngineConfig;
 use crate::graphic_engine::game_loop::GameLoop;
@@ -35,7 +37,8 @@ pub struct ChronosEngine {
     window: Option<Arc<winit::window::Window>>,
     renderer: Option<Box<dyn Renderer>>,
     config: EngineConfig,
-    scene: Scene,
+    scene: HashMap<String, Scene>,
+    current_scene: Option<String>,
 }
 
 impl ChronosEngine {
@@ -46,7 +49,8 @@ impl ChronosEngine {
             window: None,
             renderer: None,
             config,
-            scene: Scene::default(),
+            scene: HashMap::new(),
+            current_scene: None,
         }
     }
 
@@ -56,6 +60,11 @@ impl ChronosEngine {
     ///
     /// Returns an error if window cannot run
     pub fn start(&mut self) -> Result<()> {
+        if self.config.headless {
+            self.init_headless_start()?;
+            return Ok(());
+        }
+
         let event_loop = EventLoop::new()?;
         event_loop.set_control_flow(ControlFlow::Poll);
         event_loop.run_app(self)?;
@@ -63,7 +72,43 @@ impl ChronosEngine {
     }
 
     pub fn register_scene(&mut self, scene: Scene) {
-        self.scene = scene;
+        let scene_name = scene.name.clone();
+        if self.scene.is_empty() {
+            self.current_scene = Some(scene_name.clone());
+        }
+        self.scene.insert(scene_name, scene);
+    }
+
+    pub fn unregister_scene(&mut self, name: &str) {
+        self.scene.remove(name);
+        if self.current_scene == Some(name.to_string()) {
+            self.current_scene = None;
+            warn!("Current scene was unregistered, no active scene now");
+        }
+    }
+
+    pub fn set_current_scene(&mut self, name: &str) {
+        if self.scene.contains_key(name) {
+            self.current_scene = Some(name.to_string());
+        } else {
+            warn!("Scene with name '{}' does not exist", name);
+        }
+    }
+
+    pub fn run_one_frame(&mut self) -> Result<Vec<u8>> {
+        if !self.config.headless {
+            warn!("run_one_frame is intended only for headless mode");
+            return Ok(vec![]);
+        }
+
+        if let Some(renderer) = &mut self.renderer {
+            if let Some(current_scene) = &self.current_scene {
+                if let Some(scene) = self.scene.get(current_scene) {
+                    return renderer.render_to_buffer(scene).map_err(EngineError::RendererError);
+                }
+            }
+        }
+        Ok(vec![])
     }
 
     fn create_window(&mut self, event_loop: &ActiveEventLoop) -> Result<Arc<Window>> {
@@ -90,7 +135,11 @@ impl ChronosEngine {
     fn on_redraw_requested(&mut self) {
         if let Some(window) = &self.window {
             if let Some(renderer) = &mut self.renderer {
-                GameLoop::main_frame(renderer.as_mut(), window, &self.scene);
+                if let Some(current_scene) = &self.current_scene {
+                    if let Some(scene) = self.scene.get(current_scene) {
+                        GameLoop::main_frame(renderer.as_mut(), window, scene);
+                    }
+                }
             }
             window.request_redraw();
         }
@@ -111,6 +160,16 @@ impl ChronosEngine {
         let renderer = init_render(window.clone(), &self.config.renderer_type)?;
 
         self.window = Some(window);
+        self.renderer = Some(renderer);
+        Ok(())
+    }
+
+    fn init_headless_start(&mut self) -> Result<()> {
+        let renderer = init_headless_render(
+            self.config.window.resolution.width,
+            self.config.window.resolution.height,
+            &self.config.renderer_type,
+        )?;
         self.renderer = Some(renderer);
         Ok(())
     }

@@ -7,8 +7,13 @@ use chronos::{
 };
 use glam::Vec3;
 
-pub fn two_triangles_scene() -> Scene {
-    let mut scene = Scene::default();
+pub fn test_2d_two_triangles() -> Scene {
+    const TEST_NAME: &str = "2d_two_triangles";
+
+    let mut scene = Scene {
+        name: String::from(TEST_NAME),
+        ..Default::default()
+    };
 
     let triangle_one = Shape::new_triangle(
         Vec3::new(0.2, -0.5, 0.0),
@@ -23,9 +28,7 @@ pub fn two_triangles_scene() -> Scene {
         Vec3::new(-0.45, 0.5, 0.0),
     );
     let color_two = Color::PerVertex(vec![
-        1.0, 0.0, 0.0, 1.0, // Czerwony (lewy dolny)
-        0.0, 1.0, 0.0, 1.0, // Zielony (prawy dolny)
-        0.0, 0.0, 1.0, 1.0, // Niebieski (górny)
+        1.0, 0.0, 0.0, 1.0, 0.0, 1.0, 0.0, 1.0, 0.0, 0.0, 1.0, 1.0,
     ]);
 
     scene.set_background_color(&RGBA::from_hex(0xAA_BB_CC_FF));

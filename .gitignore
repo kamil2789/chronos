@@ -22,4 +22,4 @@ target
 
 .vscode/
 dev_docs/
-graphic-tests/test_results/
+graphic-tests/failed_tests/
