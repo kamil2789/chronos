@@ -28,7 +28,21 @@ impl WgpuRenderer {
         let gpu_context = GpuContext::new(window).await?;
         let shader_manager = shaders::ShaderManager::new(&gpu_context.device).await?;
         let mut pipeline_manager = PipelineManager::new();
-        pipeline_manager.build(&gpu_context.device, &gpu_context.config, &shader_manager)?;
+        pipeline_manager.build(&gpu_context.device, gpu_context.texture_format, &shader_manager)?;
+
+        Ok(Self {
+            gpu_context,
+            pipeline_manager,
+            background_color: RGBA::default(),
+            entity_cache: RefCell::new(HashMap::new()),
+        })
+    }
+
+    pub async fn new_headless(width: u32, height: u32) -> Result<Self> {
+        let gpu_context = GpuContext::new_headless(width, height).await?;
+        let shader_manager = shaders::ShaderManager::new(&gpu_context.device).await?;
+        let mut pipeline_manager = PipelineManager::new();
+        pipeline_manager.build(&gpu_context.device, gpu_context.texture_format, &shader_manager)?;
 
         Ok(Self {
             gpu_context,

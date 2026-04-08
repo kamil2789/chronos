@@ -11,7 +11,7 @@ use tracing::{error, info};
 
 use crate::configs::EngineConfig;
 use crate::graphic_engine::game_loop::GameLoop;
-use crate::renderer::{Renderer, RendererError, init_render};
+use crate::renderer::{Renderer, RendererError, init_headless_render, init_render};
 use crate::scene::Scene;
 
 pub type Result<T> = std::result::Result<T, EngineError>;
@@ -145,5 +145,32 @@ impl ApplicationHandler for ChronosEngine {
             }
             _ => {}
         }
+    }
+}
+
+pub struct HeadlessRenderer {
+    renderer: Box<dyn Renderer>,
+}
+
+impl HeadlessRenderer {
+    /// Creates a headless renderer that renders to an offscreen buffer.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if GPU initialization fails.
+    pub fn new(width: u32, height: u32, renderer_type: &RendererType) -> Result<Self> {
+        let renderer = init_headless_render(width, height, renderer_type)?;
+        Ok(Self { renderer })
+    }
+
+    /// Renders a single frame of the scene and returns raw RGBA pixel data.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if rendering fails.
+    pub fn render_to_buffer(&mut self, scene: &Scene) -> Result<Vec<u8>> {
+        self.renderer
+            .render_to_buffer(scene)
+            .map_err(EngineError::RendererError)
     }
 }

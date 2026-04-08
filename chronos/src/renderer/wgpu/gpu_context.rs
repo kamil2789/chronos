@@ -6,10 +6,13 @@ use winit::window::Window;
 use crate::renderer::{RendererError, Result};
 
 pub struct GpuContext {
-    pub surface: wgpu::Surface<'static>,
+    pub surface: Option<wgpu::Surface<'static>>,
     pub device: wgpu::Device,
     pub queue: wgpu::Queue,
-    pub config: wgpu::SurfaceConfiguration,
+    pub config: Option<wgpu::SurfaceConfiguration>,
+    pub texture_format: wgpu::TextureFormat,
+    pub width: u32,
+    pub height: u32,
 }
 
 impl GpuContext {
@@ -17,17 +20,38 @@ impl GpuContext {
         let instance = Self::create_instance();
         let size = window.inner_size();
         let surface = Self::create_surface(&instance, window)?;
-        let adapter = Self::create_adapter(&instance, &surface).await?;
+        let adapter = Self::create_adapter(&instance, Some(&surface)).await?;
         let (device, queue) = Self::create_device(&adapter).await?;
 
         let config = Self::create_surface_config(&surface, &adapter, size);
         surface.configure(&device, &config);
+        let texture_format = config.format;
 
         Ok(Self {
-            surface,
+            surface: Some(surface),
             device,
             queue,
-            config,
+            width: config.width,
+            height: config.height,
+            config: Some(config),
+            texture_format,
+        })
+    }
+
+    pub async fn new_headless(width: u32, height: u32) -> Result<Self> {
+        let instance = Self::create_instance();
+        let adapter = Self::create_adapter(&instance, None).await?;
+        let (device, queue) = Self::create_device(&adapter).await?;
+        let texture_format = wgpu::TextureFormat::Rgba8UnormSrgb;
+
+        Ok(Self {
+            surface: None,
+            device,
+            queue,
+            config: None,
+            texture_format,
+            width,
+            height,
         })
     }
 
@@ -75,12 +99,12 @@ impl GpuContext {
 
     async fn create_adapter(
         instance: &wgpu::Instance,
-        surface: &wgpu::Surface<'static>,
+        surface: Option<&wgpu::Surface<'static>>,
     ) -> Result<wgpu::Adapter> {
         instance
             .request_adapter(&wgpu::RequestAdapterOptions {
                 power_preference: wgpu::PowerPreference::default(),
-                compatible_surface: Some(surface),
+                compatible_surface: surface,
                 force_fallback_adapter: false,
             })
             .await

@@ -20,14 +20,14 @@ impl PipelineManager {
     pub fn build(
         &mut self,
         device: &wgpu::Device,
-        config: &wgpu::SurfaceConfiguration,
+        texture_format: wgpu::TextureFormat,
         shader_manager: &ShaderManager,
     ) -> Result<()> {
         let (uniform_color_pipeline, color_bind_group_layout) =
-            Self::create_uniform_color_pipeline(device, config, shader_manager)?;
+            Self::create_uniform_color_pipeline(device, texture_format, shader_manager)?;
 
         let vertex_color_pipeline =
-            Self::create_vertex_color_pipeline(device, config, shader_manager)?;
+            Self::create_vertex_color_pipeline(device, texture_format, shader_manager)?;
 
         self.uniform_color_pipeline = Some(uniform_color_pipeline);
         self.color_bind_group_layout = Some(color_bind_group_layout);
@@ -38,7 +38,7 @@ impl PipelineManager {
 
     fn create_uniform_color_pipeline(
         device: &wgpu::Device,
-        config: &wgpu::SurfaceConfiguration,
+        texture_format: wgpu::TextureFormat,
         shader_manager: &ShaderManager,
     ) -> Result<(wgpu::RenderPipeline, wgpu::BindGroupLayout)> {
         let shader = shader_manager.get_shader("uniform_color").ok_or_else(|| {
@@ -87,7 +87,7 @@ impl PipelineManager {
                 module: shader,
                 entry_point: Some("fs_main"),
                 targets: &[Some(wgpu::ColorTargetState {
-                    format: config.format,
+                    format: texture_format,
                     blend: Some(wgpu::BlendState::REPLACE),
                     write_mask: wgpu::ColorWrites::ALL,
                 })],
@@ -117,7 +117,7 @@ impl PipelineManager {
 
     fn create_vertex_color_pipeline(
         device: &wgpu::Device,
-        config: &wgpu::SurfaceConfiguration,
+        texture_format: wgpu::TextureFormat,
         shader_manager: &ShaderManager,
     ) -> Result<wgpu::RenderPipeline> {
         let shader = shader_manager.get_shader("vertex_color").ok_or_else(|| {
@@ -160,7 +160,7 @@ impl PipelineManager {
                 module: shader,
                 entry_point: Some("fs_main"),
                 targets: &[Some(wgpu::ColorTargetState {
-                    format: config.format,
+                    format: texture_format,
                     blend: Some(wgpu::BlendState::REPLACE),
                     write_mask: wgpu::ColorWrites::ALL,
                 })],
