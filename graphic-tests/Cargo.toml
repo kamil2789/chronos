@@ -6,3 +6,5 @@ edition = "2024"
 [dependencies]
 clap ={ version = "4.2.7", features = ["derive"] }
 chronos = { path = "../chronos" }
+image = "0.25"
+glam = "0.32.1"
