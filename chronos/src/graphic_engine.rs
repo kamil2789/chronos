@@ -104,7 +104,9 @@ impl ChronosEngine {
         if let Some(renderer) = &mut self.renderer {
             if let Some(current_scene) = &self.current_scene {
                 if let Some(scene) = self.scene.get(current_scene) {
-                    return renderer.render_to_buffer(scene).map_err(EngineError::RendererError);
+                    return renderer
+                        .render_to_buffer(scene)
+                        .map_err(EngineError::RendererError);
                 }
             }
         }
