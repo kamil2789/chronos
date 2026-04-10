@@ -3,24 +3,17 @@ use chronos::{
         color::{Color, RGBA},
         shape::Shape,
     },
-    configs::EngineConfig,
-    graphic_engine::ChronosEngine,
     scene::Scene,
 };
 use glam::Vec3;
-use tracing_subscriber::EnvFilter;
 
-fn main() {
-    tracing_subscriber::fmt()
-        .with_env_filter(
-            EnvFilter::try_from_default_env()
-                .unwrap_or_else(|_| EnvFilter::new("chronos=info,wgpu=error")),
-        )
-        .init();
+pub fn test_2d_two_triangles() -> Scene {
+    const TEST_NAME: &str = "2d_two_triangles";
 
-    let mut engine = ChronosEngine::new(EngineConfig::default());
-
-    let mut scene = Scene::default();
+    let mut scene = Scene {
+        name: String::from(TEST_NAME),
+        ..Default::default()
+    };
 
     let triangle_one = Shape::new_triangle(
         Vec3::new(0.2, -0.5, 0.0),
@@ -45,6 +38,6 @@ fn main() {
     scene
         .entity_manager
         .create_entity((triangle_two, color_two));
-    engine.register_scene(scene);
-    engine.start().unwrap();
+
+    scene
 }

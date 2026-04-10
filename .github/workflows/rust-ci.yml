@@ -24,10 +24,15 @@ jobs:
     - name: Run Clippy (pedantic)
       run: cargo clippy --workspace -- -W clippy::pedantic
 
-    - name: Install GL dependencies (for headless OpenGL)
+    - name: Install Vulkan software dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y xvfb libgl1-mesa-dev libglx-mesa0 mesa-utils libegl1
+        sudo apt-get install -y libvulkan1 mesa-vulkan-drivers vulkan-tools
 
-    - name: Run tests with virtual display (xvfb)
-      run: xvfb-run -a cargo test --verbose
+    - name: Run unit tests
+      run: cargo test --workspace --verbose
+
+    - name: Run graphic tests
+      env:
+        WGPU_BACKEND: vulkan
+      run: cargo run -p graphic-tests -- --test-name all --graphic-api wgpu

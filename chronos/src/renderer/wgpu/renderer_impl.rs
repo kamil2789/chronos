@@ -12,13 +12,22 @@ impl Renderer for WgpuRenderer {
         })
     }
 
+    fn render_to_buffer(&mut self, scene: &crate::scene::Scene) -> Result<Vec<u8>> {
+        self.set_background_color(&scene.background_color);
+        WgpuRenderer::render_to_buffer(self, scene)
+    }
+
     fn resize(&mut self, width: u32, height: u32) {
         if width > 0 && height > 0 {
-            self.gpu_context.config.width = width;
-            self.gpu_context.config.height = height;
-            self.gpu_context
-                .surface
-                .configure(&self.gpu_context.device, &self.gpu_context.config);
+            self.gpu_context.width = width;
+            self.gpu_context.height = height;
+            if let (Some(surface), Some(config)) =
+                (&self.gpu_context.surface, &mut self.gpu_context.config)
+            {
+                config.width = width;
+                config.height = height;
+                surface.configure(&self.gpu_context.device, config);
+            }
         }
     }
 

@@ -20,7 +20,12 @@ pub struct EntityRenderCache {
 
 impl WgpuRenderer {
     pub fn render(&mut self, scene: &Scene) -> std::result::Result<(), wgpu::SurfaceError> {
-        let current_frame = self.gpu_context.surface.get_current_texture()?;
+        let surface = self
+            .gpu_context
+            .surface
+            .as_ref()
+            .expect("render() requires a windowed context");
+        let current_frame = surface.get_current_texture()?;
         let frame_view = current_frame
             .texture
             .create_view(&wgpu::TextureViewDescriptor::default());
@@ -48,36 +53,7 @@ impl WgpuRenderer {
                 ..Default::default()
             });
 
-            let entities = entity::query_entities!(scene.entity_manager, Shape, Color);
-
-            for entity_id in entities {
-                if let (Some(shape), Some(color)) = (
-                    scene.entity_manager.get_component::<Shape>(entity_id),
-                    scene
-                        .entity_manager
-                        .get_component::<crate::components::color::Color>(entity_id),
-                ) {
-                    if color.is_uniform() {
-                        if let Some(pipeline) = &self.pipeline_manager.uniform_color_pipeline {
-                            self.render_entity_with_uniform_color(
-                                &mut render_pass,
-                                pipeline,
-                                entity_id,
-                                shape,
-                                color,
-                            );
-                        }
-                    } else if let Some(pipeline) = &self.pipeline_manager.vertex_color_pipeline {
-                        self.render_entity_with_vertex_color(
-                            &mut render_pass,
-                            pipeline,
-                            entity_id,
-                            shape,
-                            color,
-                        );
-                    }
-                }
-            }
+            self.draw_entities(&mut render_pass, scene);
         }
 
         self.gpu_context
@@ -86,6 +62,162 @@ impl WgpuRenderer {
         current_frame.present();
 
         Ok(())
+    }
+
+    #[allow(clippy::too_many_lines)]
+    pub fn render_to_buffer(&mut self, scene: &Scene) -> crate::renderer::Result<Vec<u8>> {
+        let width = self.gpu_context.width;
+        let height = self.gpu_context.height;
+        let texture_format = self.gpu_context.texture_format;
+
+        let texture = self
+            .gpu_context
+            .device
+            .create_texture(&wgpu::TextureDescriptor {
+                label: Some("Headless Render Texture"),
+                size: wgpu::Extent3d {
+                    width,
+                    height,
+                    depth_or_array_layers: 1,
+                },
+                mip_level_count: 1,
+                sample_count: 1,
+                dimension: wgpu::TextureDimension::D2,
+                format: texture_format,
+                usage: wgpu::TextureUsages::RENDER_ATTACHMENT | wgpu::TextureUsages::COPY_SRC,
+                view_formats: &[],
+            });
+        let texture_view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+
+        let bytes_per_pixel = 4u32;
+        let unpadded_bytes_per_row = width * bytes_per_pixel;
+        let align = wgpu::COPY_BYTES_PER_ROW_ALIGNMENT;
+        let padded_bytes_per_row = unpadded_bytes_per_row.div_ceil(align) * align;
+        let buffer_size = u64::from(padded_bytes_per_row * height);
+
+        let output_buffer = self
+            .gpu_context
+            .device
+            .create_buffer(&wgpu::BufferDescriptor {
+                label: Some("Headless Output Buffer"),
+                size: buffer_size,
+                usage: wgpu::BufferUsages::MAP_READ | wgpu::BufferUsages::COPY_DST,
+                mapped_at_creation: false,
+            });
+
+        let mut encoder =
+            self.gpu_context
+                .device
+                .create_command_encoder(&wgpu::CommandEncoderDescriptor {
+                    label: Some("Headless Render Encoder"),
+                });
+
+        {
+            let color_attachment = wgpu::RenderPassColorAttachment {
+                view: &texture_view,
+                resolve_target: None,
+                ops: wgpu::Operations {
+                    load: wgpu::LoadOp::Clear((&self.background_color).into()),
+                    store: wgpu::StoreOp::Store,
+                },
+                depth_slice: None,
+            };
+            let mut render_pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
+                label: Some("Headless Render Pass"),
+                color_attachments: &[Some(color_attachment)],
+                ..Default::default()
+            });
+
+            self.draw_entities(&mut render_pass, scene);
+        }
+
+        encoder.copy_texture_to_buffer(
+            wgpu::TexelCopyTextureInfo {
+                texture: &texture,
+                mip_level: 0,
+                origin: wgpu::Origin3d::ZERO,
+                aspect: wgpu::TextureAspect::All,
+            },
+            wgpu::TexelCopyBufferInfo {
+                buffer: &output_buffer,
+                layout: wgpu::TexelCopyBufferLayout {
+                    offset: 0,
+                    bytes_per_row: Some(padded_bytes_per_row),
+                    rows_per_image: Some(height),
+                },
+            },
+            wgpu::Extent3d {
+                width,
+                height,
+                depth_or_array_layers: 1,
+            },
+        );
+
+        let submission_index = self
+            .gpu_context
+            .queue
+            .submit(std::iter::once(encoder.finish()));
+
+        let buffer_slice = output_buffer.slice(..);
+        let (sender, receiver) = std::sync::mpsc::channel();
+        buffer_slice.map_async(wgpu::MapMode::Read, move |result| {
+            sender.send(result).unwrap();
+        });
+        self.gpu_context
+            .device
+            .poll(wgpu::PollType::Wait {
+                submission_index: Some(submission_index),
+                timeout: None,
+            })
+            .ok();
+        receiver.recv().unwrap().map_err(|e| {
+            crate::renderer::RendererError::Render(format!("Failed to map buffer: {e}"))
+        })?;
+
+        let data = buffer_slice.get_mapped_range();
+        let mut pixels = Vec::with_capacity((width * height * bytes_per_pixel) as usize);
+        for row in 0..height {
+            let start = (row * padded_bytes_per_row) as usize;
+            let end = start + unpadded_bytes_per_row as usize;
+            pixels.extend_from_slice(&data[start..end]);
+        }
+        drop(data);
+        output_buffer.unmap();
+
+        Ok(pixels)
+    }
+
+    fn draw_entities(&self, render_pass: &mut wgpu::RenderPass, scene: &Scene) {
+        let entities = entity::query_entities!(scene.entity_manager, Shape, Color);
+
+        for entity_id in entities {
+            if let (Some(shape), Some(color)) = (
+                scene.entity_manager.get_component::<Shape>(entity_id),
+                scene
+                    .entity_manager
+                    .get_component::<crate::components::color::Color>(entity_id),
+            ) {
+                if color.is_uniform() {
+                    if let Some(pipeline) = &self.pipeline_manager.uniform_color_pipeline {
+                        self.render_entity_with_uniform_color(
+                            render_pass,
+                            pipeline,
+                            entity_id,
+                            shape,
+                            color,
+                        );
+                    }
+                } else if let Some(pipeline) = &self.pipeline_manager.vertex_color_pipeline {
+                    self.render_entity_with_vertex_color(
+                        render_pass,
+                        pipeline,
+                        entity_id,
+                        shape,
+                        color,
+                    );
+                }
+            }
+        }
     }
 
     fn render_entity_with_vertex_color(
