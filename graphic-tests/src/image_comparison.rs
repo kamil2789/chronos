@@ -2,10 +2,7 @@ use std::path::Path;
 
 use image::{ImageBuffer, Rgba};
 
-use crate::{
-    tests::{PIXEL_FAIL_THRESHOLD_PCT, RENDER_HEIGHT, RENDER_WIDTH},
-    workspace,
-};
+use crate::{tests::PIXEL_FAIL_THRESHOLD_PCT, workspace};
 
 pub struct TestResult {
     pub passed: bool,
@@ -35,7 +32,14 @@ pub enum TestResultKind {
     Error(String),
 }
 
+pub struct GoldenImage {
+    pub width: u32,
+    pub height: u32,
+    pub bytes: Vec<u8>,
+}
+
 pub struct DiffResult {
+    pub total_pixel_count: usize,
     pub failed_pixel_count: usize,
     pub pixel_within_tolerance_count: usize,
     pub max_delta: u8,
@@ -109,6 +113,7 @@ pub fn compute_diff(
     }
 
     DiffResult {
+        total_pixel_count: pixel_count,
         failed_pixel_count,
         pixel_within_tolerance_count,
         max_delta,
@@ -151,9 +156,13 @@ pub fn check_buffer_size(actual: &[u8], golden: &[u8]) -> Option<TestResult> {
 /// | Failed pixels exist, but their % is below the test threshold | `PassedBelowThreshold`   | yes    |
 /// | Failed pixels exceed the test threshold                      | `Failed`                 | no     |
 pub fn compute_pass(diff: &DiffResult) -> TestResult {
-    let total = (RENDER_WIDTH * RENDER_HEIGHT) as usize;
+    let total = diff.total_pixel_count;
     #[allow(clippy::cast_precision_loss)]
-    let fail_pct = diff.failed_pixel_count as f64 / total as f64 * 100.0;
+    let fail_pct = if total == 0 {
+        0.0
+    } else {
+        diff.failed_pixel_count as f64 / total as f64 * 100.0
+    };
 
     if diff.failed_pixel_count == 0 {
         if diff.pixel_within_tolerance_count > 0 {
@@ -191,20 +200,32 @@ pub fn compute_pass(diff: &DiffResult) -> TestResult {
     }
 }
 
-pub fn get_golden_image_bytes(test_name: &str) -> Vec<u8> {
+pub fn get_golden_image_bytes(test_name: &str) -> Result<GoldenImage, String> {
     let golden_path = format!("{}{}.png", workspace::GOLDEN_DIR, test_name);
-    image::open(&golden_path)
-        .expect("Failed to open golden image")
-        .to_rgba8()
-        .into_raw()
+    let image = image::open(&golden_path)
+        .map_err(|err| format!("failed to open golden image '{golden_path}': {err}"))?
+        .to_rgba8();
+    let (width, height) = image.dimensions();
+
+    Ok(GoldenImage {
+        width,
+        height,
+        bytes: image.into_raw(),
+    })
 }
 
-pub fn save_result_images(test_name: &str, tested_bytes: &[u8], diff: &DiffResult) {
+pub fn save_result_images(
+    test_name: &str,
+    width: u32,
+    height: u32,
+    tested_bytes: &[u8],
+    diff: &DiffResult,
+) {
     let actual_path = format!("{}{}_actual.png", workspace::TEST_RESULTS_DIR, test_name);
     let diff_path = format!("{}{}_diff.png", workspace::TEST_RESULTS_DIR, test_name);
 
-    save_image(&actual_path, RENDER_WIDTH, RENDER_HEIGHT, tested_bytes);
-    save_image(&diff_path, RENDER_WIDTH, RENDER_HEIGHT, &diff.diff_image);
+    save_image(&actual_path, width, height, tested_bytes);
+    save_image(&diff_path, width, height, &diff.diff_image);
 
     println!("    -> Actual: {actual_path}");
     println!("    -> Diff:   {diff_path}");
@@ -309,6 +330,7 @@ mod tests {
 
     fn make_diff(failed: usize, within_tolerance: usize, max_delta: u8) -> DiffResult {
         DiffResult {
+            total_pixel_count: 921_600,
             failed_pixel_count: failed,
             pixel_within_tolerance_count: within_tolerance,
             max_delta,
@@ -360,5 +382,21 @@ mod tests {
         assert!(
             matches!(result.kind, TestResultKind::Failed { fail_pct, .. } if (fail_pct - 100.0).abs() < 0.001)
         );
+    }
+
+    #[test]
+    fn fail_threshold_uses_actual_pixel_count() {
+        let diff = DiffResult {
+            total_pixel_count: 50,
+            failed_pixel_count: 1,
+            pixel_within_tolerance_count: 0,
+            max_delta: 5,
+            diff_image: vec![],
+        };
+
+        let result = compute_pass(&diff);
+
+        assert!(!result.passed);
+        assert!(matches!(result.kind, TestResultKind::Failed { .. }));
     }
 }

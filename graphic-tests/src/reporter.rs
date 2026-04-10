@@ -1,7 +1,7 @@
 use colored::Colorize;
 
 use crate::{
-    image_utils::{TestResult, TestResultKind},
+    image_comparison::{TestResult, TestResultKind},
     tests::{CHANNEL_TOLERANCE, PIXEL_FAIL_THRESHOLD_PCT, RunResults},
 };
 

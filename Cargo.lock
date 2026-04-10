@@ -1026,6 +1026,7 @@ dependencies = [
  "colored",
  "glam",
  "image",
+ "tracing-subscriber",
 ]
 
 [[package]]

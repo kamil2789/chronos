@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use tracing::info;
 use wgpu::MemoryHints;
 use winit::dpi::PhysicalSize;
 use winit::window::Window;
@@ -56,10 +57,13 @@ impl GpuContext {
     }
 
     fn create_instance() -> wgpu::Instance {
-        wgpu::Instance::new(&wgpu::InstanceDescriptor {
-            backends: wgpu::Backends::PRIMARY,
-            ..Default::default()
-        })
+        wgpu::Instance::new(
+            &wgpu::InstanceDescriptor {
+                backends: wgpu::Backends::PRIMARY,
+                ..Default::default()
+            }
+            .with_env(),
+        )
     }
 
     fn create_surface(
@@ -101,14 +105,26 @@ impl GpuContext {
         instance: &wgpu::Instance,
         surface: Option<&wgpu::Surface<'static>>,
     ) -> Result<wgpu::Adapter> {
-        instance
+        let adapter = instance
             .request_adapter(&wgpu::RequestAdapterOptions {
                 power_preference: wgpu::PowerPreference::default(),
                 compatible_surface: surface,
                 force_fallback_adapter: false,
             })
             .await
-            .map_err(|e| RendererError::Initialization(format!("Failed to find adapter: {e}")))
+            .map_err(|e| RendererError::Initialization(format!("Failed to find adapter: {e}")))?;
+
+        let adapter_info = adapter.get_info();
+        info!(
+            "Selected WGPU adapter: backend={:?}, name='{}', device_type={:?}, driver='{}', driver_info='{}'",
+            adapter_info.backend,
+            adapter_info.name,
+            adapter_info.device_type,
+            adapter_info.driver,
+            adapter_info.driver_info,
+        );
+
+        Ok(adapter)
     }
 
     async fn create_device(adapter: &wgpu::Adapter) -> Result<(wgpu::Device, wgpu::Queue)> {

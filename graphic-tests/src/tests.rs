@@ -6,7 +6,7 @@ use chronos::{
 
 use crate::{
     args_parser::{Args, GraphicApi},
-    image_utils::{
+    image_comparison::{
         TestResult, check_buffer_size, compute_diff, compute_pass, get_golden_image_bytes,
         save_result_images,
     },
@@ -17,8 +17,6 @@ use crate::{
 
 pub(crate) mod basic_2d_geometries;
 
-pub const RENDER_WIDTH: u32 = 1280;
-pub const RENDER_HEIGHT: u32 = 720;
 pub const CHANNEL_TOLERANCE: u8 = 2;
 pub const PIXEL_FAIL_THRESHOLD_PCT: f64 = 0.01;
 
@@ -55,7 +53,9 @@ fn run_tests(engine: &mut ChronosEngine, test_name_arg: &str) -> RunResults {
     let mut result = RunResults::default();
 
     if test_name_arg.eq_ignore_ascii_case("all") {
-        for scene_name in engine.get_scenes_names() {
+        let scene_names = engine.get_sorted_scenes_names();
+
+        for scene_name in scene_names {
             let test_result = run_single_test(&scene_name, engine);
             result.update_result(&test_result, &scene_name);
         }
@@ -96,18 +96,25 @@ fn run_single_test(test_name: &str, engine: &mut ChronosEngine) -> TestResult {
     }
 
     let tested_bytes = engine.run_one_frame().expect("Failed to run one frame");
-    let golden_bytes = get_golden_image_bytes(test_name);
+    let golden_image = match get_golden_image_bytes(test_name) {
+        Ok(golden_image) => golden_image,
+        Err(err) => {
+            let result = TestResult::error(err);
+            reporter::print_result(test_name, &result);
+            return result;
+        }
+    };
 
-    if let Some(result) = check_buffer_size(&tested_bytes, &golden_bytes) {
+    if let Some(result) = check_buffer_size(&tested_bytes, &golden_image.bytes) {
         reporter::print_result(test_name, &result);
         return result;
     }
 
     let diff = compute_diff(
         &tested_bytes,
-        &golden_bytes,
-        RENDER_WIDTH,
-        RENDER_HEIGHT,
+        &golden_image.bytes,
+        golden_image.width,
+        golden_image.height,
         CHANNEL_TOLERANCE,
     );
 
@@ -115,7 +122,13 @@ fn run_single_test(test_name: &str, engine: &mut ChronosEngine) -> TestResult {
     reporter::print_result(test_name, &result);
 
     if !result.passed {
-        save_result_images(test_name, &tested_bytes, &diff);
+        save_result_images(
+            test_name,
+            golden_image.width,
+            golden_image.height,
+            &tested_bytes,
+            &diff,
+        );
     }
 
     result

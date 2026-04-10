@@ -73,8 +73,10 @@ impl ChronosEngine {
     }
 
     #[must_use]
-    pub fn get_scenes_names(&self) -> Vec<String> {
-        self.scene.keys().cloned().collect()
+    pub fn get_sorted_scenes_names(&self) -> Vec<String> {
+        let mut keys: Vec<String> = self.scene.keys().cloned().collect();
+        keys.sort();
+        keys
     }
 
     pub fn register_scene(&mut self, scene: Scene) {

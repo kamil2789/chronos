@@ -2,7 +2,7 @@
 
 A simple CLI runner for graphical tests.
 
-The project is still at a very early stage of development. At the moment, the argument parser is ready, but the actual test execution logic is still minimal.
+The project is still at a very early stage of development, but it already runs headless rendering tests and compares the generated frame with golden images.
 
 ## Running
 
@@ -17,6 +17,8 @@ From the `graphic-tests` directory:
 ```bash
 cargo run -- [OPTIONS]
 ```
+
+The runner currently expects to be started either from the workspace root or directly from the `graphic-tests` crate directory.
 
 ## Available options
 
@@ -33,7 +35,7 @@ All
 Example:
 
 ```bash
-cargo run -p graphic-tests -- --test-name Triangle
+cargo run -p graphic-tests -- --test-name 2d_two_triangles
 ```
 
 ### `--graphic-api`, `-g`
@@ -43,14 +45,13 @@ Limits execution to a specific graphics API.
 Available values:
 
 ```text
-all
 wgpu
 ```
 
 Default value:
 
 ```text
-all
+wgpu
 ```
 
 Examples:
@@ -70,4 +71,11 @@ cargo run -p graphic-tests -- --help
 
 ## Current status
 
-Right now the program only parses arguments and runs a stub test runner. The actual test dispatching and image comparison logic is still in progress.
+Current implementation supports:
+
+- collecting registered test scenes,
+- rendering a single headless frame per test,
+- comparing the output against golden images with per-channel tolerance,
+- saving actual and diff images for failed tests.
+
+Right now the scope is intentionally narrow: only the `wgpu` backend is wired in, and the test catalog is still small.
