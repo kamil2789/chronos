@@ -13,7 +13,7 @@ impl Renderer for WgpuRenderer {
     }
 
     fn render_to_buffer(&mut self, scene: &crate::scene::Scene) -> Result<Vec<u8>> {
-        self.set_background_color(&scene.background_color.clone());
+        self.set_background_color(&scene.background_color);
         WgpuRenderer::render_to_buffer(self, scene)
     }
 
