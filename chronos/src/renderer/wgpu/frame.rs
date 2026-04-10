@@ -4,6 +4,7 @@ use wgpu::util::DeviceExt;
 use crate::components::color::Color;
 use crate::components::shape::Shape;
 use crate::entity;
+use crate::renderer::Result;
 use crate::scene::Scene;
 
 use super::WgpuRenderer;
@@ -19,13 +20,22 @@ pub struct EntityRenderCache {
 }
 
 impl WgpuRenderer {
-    pub fn render(&mut self, scene: &Scene) -> std::result::Result<(), wgpu::SurfaceError> {
+    pub fn render(&mut self, scene: &Scene) -> Result<()> {
         let surface = self
             .gpu_context
             .surface
             .as_ref()
             .expect("render() requires a windowed context");
-        let current_frame = surface.get_current_texture()?;
+        let current_frame = match surface.get_current_texture() {
+            wgpu::CurrentSurfaceTexture::Success(frame)
+            | wgpu::CurrentSurfaceTexture::Suboptimal(frame) => frame,
+            wgpu::CurrentSurfaceTexture::Lost | wgpu::CurrentSurfaceTexture::Outdated => {
+                return Err(crate::renderer::RendererError::Surface(
+                    "Surface lost or outdated - resize required".to_string(),
+                ));
+            }
+            _ => return Ok(()),
+        };
         let frame_view = current_frame
             .texture
             .create_view(&wgpu::TextureViewDescriptor::default());

@@ -58,9 +58,9 @@ impl GpuContext {
 
     fn create_instance() -> wgpu::Instance {
         wgpu::Instance::new(
-            &wgpu::InstanceDescriptor {
+            wgpu::InstanceDescriptor {
                 backends: wgpu::Backends::PRIMARY,
-                ..Default::default()
+                ..wgpu::InstanceDescriptor::new_without_display_handle()
             }
             .with_env(),
         )
