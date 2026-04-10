@@ -2,7 +2,6 @@ mod game_loop;
 
 use std::collections::HashMap;
 use std::sync::Arc;
-use wgpu::hal::auxil::db;
 use winit::application::ApplicationHandler;
 use winit::dpi::LogicalSize;
 use winit::event::WindowEvent;
@@ -26,6 +25,8 @@ pub enum EngineError {
     EventLoopError(#[from] winit::error::EventLoopError),
     #[error("Renderer error: {0}")]
     RendererError(#[from] RendererError),
+    #[error("Scene not found: {0}")]
+    SceneNotFound(String),
 }
 
 #[derive(Clone)]
@@ -71,6 +72,11 @@ impl ChronosEngine {
         Ok(())
     }
 
+    #[must_use]
+    pub fn get_scenes_names(&self) -> Vec<String> {
+        self.scene.keys().cloned().collect()
+    }
+
     pub fn register_scene(&mut self, scene: Scene) {
         let scene_name = scene.name.clone();
         if self.scene.is_empty() {
@@ -87,28 +93,34 @@ impl ChronosEngine {
         }
     }
 
-    pub fn set_current_scene(&mut self, name: &str) {
+    /// # Errors
+    ///
+    /// Returns an error if the scene does not exist
+    pub fn set_current_scene(&mut self, name: &str) -> Result<()> {
         if self.scene.contains_key(name) {
             self.current_scene = Some(name.to_string());
+            Ok(())
         } else {
-            warn!("Scene with name '{}' does not exist", name);
+            Err(EngineError::SceneNotFound(name.to_string()))
         }
     }
 
+    /// # Errors
+    ///
+    /// Returns an error if rendering fails
     pub fn run_one_frame(&mut self) -> Result<Vec<u8>> {
         if !self.config.headless {
             warn!("run_one_frame is intended only for headless mode");
             return Ok(vec![]);
         }
 
-        if let Some(renderer) = &mut self.renderer {
-            if let Some(current_scene) = &self.current_scene {
-                if let Some(scene) = self.scene.get(current_scene) {
-                    return renderer
-                        .render_to_buffer(scene)
-                        .map_err(EngineError::RendererError);
-                }
-            }
+        if let Some(renderer) = &mut self.renderer
+            && let Some(current_scene) = &self.current_scene
+            && let Some(scene) = self.scene.get(current_scene)
+        {
+            return renderer
+                .render_to_buffer(scene)
+                .map_err(EngineError::RendererError);
         }
         Ok(vec![])
     }
@@ -136,12 +148,11 @@ impl ChronosEngine {
 
     fn on_redraw_requested(&mut self) {
         if let Some(window) = &self.window {
-            if let Some(renderer) = &mut self.renderer {
-                if let Some(current_scene) = &self.current_scene {
-                    if let Some(scene) = self.scene.get(current_scene) {
-                        GameLoop::main_frame(renderer.as_mut(), window, scene);
-                    }
-                }
+            if let Some(renderer) = &mut self.renderer
+                && let Some(current_scene) = &self.current_scene
+                && let Some(scene) = self.scene.get(current_scene)
+            {
+                GameLoop::main_frame(renderer.as_mut(), window, scene);
             }
             window.request_redraw();
         }

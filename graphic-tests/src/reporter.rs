@@ -2,7 +2,7 @@ use colored::Colorize;
 
 use crate::{
     image_utils::{TestResult, TestResultKind},
-    tests::{CHANNEL_TOLERANCE, PIXEL_FAIL_THRESHOLD_PCT},
+    tests::{CHANNEL_TOLERANCE, PIXEL_FAIL_THRESHOLD_PCT, RunResults},
 };
 
 pub fn print_result(test_name: &str, result: &TestResult) {
@@ -62,16 +62,19 @@ pub fn print_result(test_name: &str, result: &TestResult) {
                 golden,
             );
         }
+        TestResultKind::Error(err) => {
+            println!("{} ... {} (error: {})", test_name, "FAILED".red(), err,);
+        }
     }
 }
 
-pub fn print_summary(passed: usize, failed_names: &[String]) {
-    let total = passed + failed_names.len();
+pub fn print_summary(results: RunResults) {
+    let total = results.passed + results.failed_names.len();
     println!();
-    println!("Results: {}/{} passed", passed, total);
-    if !failed_names.is_empty() {
+    println!("Results: {}/{} passed", results.passed, total);
+    if !results.failed_names.is_empty() {
         println!("Failed tests:");
-        for name in failed_names {
+        for name in results.failed_names {
             println!("  {} {}", "FAILED".red(), name);
         }
     }

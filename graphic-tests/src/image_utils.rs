@@ -32,6 +32,7 @@ pub enum TestResultKind {
         actual: usize,
         golden: usize,
     },
+    Error(String),
 }
 
 pub struct DiffResult {
@@ -39,6 +40,15 @@ pub struct DiffResult {
     pub pixel_within_tolerance_count: usize,
     pub max_delta: u8,
     pub diff_image: Vec<u8>,
+}
+
+impl TestResult {
+    pub fn error(message: String) -> Self {
+        Self {
+            passed: false,
+            kind: TestResultKind::Error(message),
+        }
+    }
 }
 
 pub fn compute_diff(
@@ -107,7 +117,9 @@ pub fn compute_diff(
 }
 
 pub fn check_buffer_size(actual: &[u8], golden: &[u8]) -> Option<TestResult> {
-    if actual.len() != golden.len() {
+    if actual.len() == golden.len() {
+        None
+    } else {
         Some(TestResult {
             passed: false,
             kind: TestResultKind::BufferSizeMismatch {
@@ -115,8 +127,6 @@ pub fn check_buffer_size(actual: &[u8], golden: &[u8]) -> Option<TestResult> {
                 golden: golden.len(),
             },
         })
-    } else {
-        None
     }
 }
 
@@ -142,6 +152,7 @@ pub fn check_buffer_size(actual: &[u8], golden: &[u8]) -> Option<TestResult> {
 /// | Failed pixels exceed the test threshold                      | `Failed`                 | no     |
 pub fn compute_pass(diff: &DiffResult) -> TestResult {
     let total = (RENDER_WIDTH * RENDER_HEIGHT) as usize;
+    #[allow(clippy::cast_precision_loss)]
     let fail_pct = diff.failed_pixel_count as f64 / total as f64 * 100.0;
 
     if diff.failed_pixel_count == 0 {
@@ -206,4 +217,148 @@ pub fn save_image(path: &str, width: u32, height: u32, rgba_data: &[u8]) {
     let img: ImageBuffer<Rgba<u8>, _> = ImageBuffer::from_raw(width, height, rgba_data.to_vec())
         .expect("Failed to create image buffer");
     img.save(path).expect("Failed to save image");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    const TOLERANCE: u8 = 2;
+
+    // 1x1 pixel helpers
+    fn pixel(r: u8, g: u8, b: u8, a: u8) -> Vec<u8> {
+        vec![r, g, b, a]
+    }
+
+    // ── compute_diff ─────────────────────────────────────────────────────────
+
+    #[test]
+    fn diff_identical_pixels() {
+        let buf = pixel(100, 150, 200, 255);
+        let result = compute_diff(&buf, &buf, 1, 1, TOLERANCE);
+
+        assert_eq!(result.failed_pixel_count, 0);
+        assert_eq!(result.pixel_within_tolerance_count, 0);
+        assert_eq!(result.max_delta, 0);
+        // dimmed original: each channel / 4
+        assert_eq!(result.diff_image, vec![25, 37, 50, 255]);
+    }
+
+    #[test]
+    fn diff_pixel_within_tolerance() {
+        let actual = pixel(100, 100, 100, 255);
+        let golden = pixel(101, 100, 100, 255); // delta = 1, within tolerance=2
+        let result = compute_diff(&actual, &golden, 1, 1, TOLERANCE);
+
+        assert_eq!(result.failed_pixel_count, 0);
+        assert_eq!(result.pixel_within_tolerance_count, 1);
+        assert_eq!(result.max_delta, 1);
+        // yellow marker
+        assert_eq!(result.diff_image, vec![255, 255, 0, 255]);
+    }
+
+    #[test]
+    fn diff_pixel_exactly_at_tolerance_boundary() {
+        let actual = pixel(100, 100, 100, 255);
+        let golden = pixel(102, 100, 100, 255); // delta = 2 == tolerance
+        let result = compute_diff(&actual, &golden, 1, 1, TOLERANCE);
+
+        assert_eq!(result.failed_pixel_count, 0);
+        assert_eq!(result.pixel_within_tolerance_count, 1);
+    }
+
+    #[test]
+    fn diff_pixel_beyond_tolerance() {
+        let actual = pixel(100, 100, 100, 255);
+        let golden = pixel(110, 100, 100, 255); // delta = 10, beyond tolerance=2
+        let result = compute_diff(&actual, &golden, 1, 1, TOLERANCE);
+
+        assert_eq!(result.failed_pixel_count, 1);
+        assert_eq!(result.pixel_within_tolerance_count, 0);
+        assert_eq!(result.max_delta, 10);
+        // red marker
+        assert_eq!(result.diff_image, vec![255, 0, 0, 255]);
+    }
+
+    #[test]
+    fn diff_two_pixels_mixed() {
+        // 2x1: first identical, second failed
+        let actual = vec![50, 50, 50, 255, 100, 100, 100, 255];
+        let golden = vec![50, 50, 50, 255, 200, 100, 100, 255];
+        let result = compute_diff(&actual, &golden, 2, 1, TOLERANCE);
+
+        assert_eq!(result.failed_pixel_count, 1);
+        assert_eq!(result.pixel_within_tolerance_count, 0);
+        assert_eq!(result.max_delta, 100);
+    }
+
+    #[test]
+    fn diff_max_delta_is_channel_max_across_all_pixels() {
+        // pixel 1: delta 5, pixel 2: delta 20
+        let actual = vec![0, 0, 0, 255, 0, 0, 0, 255];
+        let golden = vec![5, 0, 0, 255, 20, 0, 0, 255];
+        let result = compute_diff(&actual, &golden, 2, 1, TOLERANCE);
+
+        assert_eq!(result.max_delta, 20);
+        assert_eq!(result.failed_pixel_count, 2);
+    }
+
+    // ── compute_pass ─────────────────────────────────────────────────────────
+    // RENDER_WIDTH=1280, RENDER_HEIGHT=720 → 921_600 total pixels
+    // PIXEL_FAIL_THRESHOLD_PCT=0.01 → threshold at 92.16, so ≤92 fails = pass
+
+    fn make_diff(failed: usize, within_tolerance: usize, max_delta: u8) -> DiffResult {
+        DiffResult {
+            failed_pixel_count: failed,
+            pixel_within_tolerance_count: within_tolerance,
+            max_delta,
+            diff_image: vec![],
+        }
+    }
+
+    #[test]
+    fn pass_identical() {
+        let result = compute_pass(&make_diff(0, 0, 0));
+        assert!(result.passed);
+        assert!(matches!(result.kind, TestResultKind::Identical));
+    }
+
+    #[test]
+    fn pass_within_tolerance() {
+        let result = compute_pass(&make_diff(0, 10, 2));
+        assert!(result.passed);
+        assert!(matches!(
+            result.kind,
+            TestResultKind::PassedWithinTolerance {
+                pixel_count: 10,
+                max_delta: 2
+            }
+        ));
+    }
+
+    #[test]
+    fn pass_below_threshold() {
+        let result = compute_pass(&make_diff(92, 0, 5)); // 92 / 921_600 = 0.00998% < 0.01%
+        assert!(result.passed);
+        assert!(matches!(
+            result.kind,
+            TestResultKind::PassedBelowThreshold { .. }
+        ));
+    }
+
+    #[test]
+    fn fail_above_threshold() {
+        let result = compute_pass(&make_diff(93, 0, 5)); // 93 / 921_600 = 0.01009% > 0.01%
+        assert!(!result.passed);
+        assert!(matches!(result.kind, TestResultKind::Failed { .. }));
+    }
+
+    #[test]
+    fn fail_all_pixels() {
+        let result = compute_pass(&make_diff(921_600, 0, 255));
+        assert!(!result.passed);
+        assert!(
+            matches!(result.kind, TestResultKind::Failed { fail_pct, .. } if (fail_pct - 100.0).abs() < 0.001)
+        );
+    }
 }

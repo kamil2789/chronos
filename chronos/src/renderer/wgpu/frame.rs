@@ -64,6 +64,7 @@ impl WgpuRenderer {
         Ok(())
     }
 
+    #[allow(clippy::too_many_lines)]
     pub fn render_to_buffer(&mut self, scene: &Scene) -> crate::renderer::Result<Vec<u8>> {
         let width = self.gpu_context.width;
         let height = self.gpu_context.height;
@@ -91,7 +92,7 @@ impl WgpuRenderer {
         let bytes_per_pixel = 4u32;
         let unpadded_bytes_per_row = width * bytes_per_pixel;
         let align = wgpu::COPY_BYTES_PER_ROW_ALIGNMENT;
-        let padded_bytes_per_row = (unpadded_bytes_per_row + align - 1) / align * align;
+        let padded_bytes_per_row = unpadded_bytes_per_row.div_ceil(align) * align;
         let buffer_size = u64::from(padded_bytes_per_row * height);
 
         let output_buffer = self

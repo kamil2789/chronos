@@ -22,60 +22,49 @@ pub const RENDER_HEIGHT: u32 = 720;
 pub const CHANNEL_TOLERANCE: u8 = 2;
 pub const PIXEL_FAIL_THRESHOLD_PCT: f64 = 0.01;
 
-pub fn run(args: &Args) {
-    println!("Running graphic tests...");
+#[derive(Default)]
+pub struct RunResults {
+    pub passed: usize,
+    pub failed_names: Vec<String>,
+}
+
+pub fn run_framework(args: &Args) {
     prepare_working_directory();
     let mut engine = create_engine(args);
 
-    let all_tests = collect_wgpu_tests();
-    let selected_tests = select_tests(&args.test_name, all_tests);
-    let test_names: Vec<String> = selected_tests.iter().map(|s| s.name.clone()).collect();
-    register_scenes(&mut engine, selected_tests);
+    register_scenes(&mut engine, collect_wgpu_tests());
 
     engine.start().expect("Failed to start engine");
 
-    let test_name_refs: Vec<&str> = test_names.iter().map(String::as_str).collect();
-    let results = run_tests(&test_name_refs, &mut engine);
-    reporter::print_summary(results.passed, &results.failed_names);
+    let results = run_tests(&mut engine, &args.test_name);
 
-    if !results.failed_names.is_empty() {
-        std::process::exit(1);
-    }
+    reporter::print_summary(results);
 }
 
-fn select_tests(test_name: &str, all_tests: Vec<Scene>) -> Vec<Scene> {
-    if test_name == "All" {
-        all_tests
-    } else {
-        all_tests
-            .into_iter()
-            .filter(|s| s.name == test_name)
-            .collect()
-    }
-}
-
-struct RunResults {
-    passed: usize,
-    failed_names: Vec<String>,
-}
-
-fn run_tests(test_names: &[&str], engine: &mut ChronosEngine) -> RunResults {
-    let mut passed = 0;
-    let mut failed_names = Vec::new();
-
-    for &name in test_names {
-        let result = run_test(name, engine);
-        if result.passed {
-            passed += 1;
+impl RunResults {
+    fn update_result(&mut self, test_result: &TestResult, test_name: &str) {
+        if test_result.passed {
+            self.passed += 1;
         } else {
-            failed_names.push(name.to_string());
+            self.failed_names.push(test_name.to_string());
         }
     }
+}
 
-    RunResults {
-        passed,
-        failed_names,
+fn run_tests(engine: &mut ChronosEngine, test_name_arg: &str) -> RunResults {
+    let mut result = RunResults::default();
+
+    if test_name_arg.eq_ignore_ascii_case("all") {
+        for scene_name in engine.get_scenes_names() {
+            let test_result = run_single_test(&scene_name, engine);
+            result.update_result(&test_result, &scene_name);
+        }
+    } else {
+        let test_result = run_single_test(test_name_arg, engine);
+        result.update_result(&test_result, test_name_arg);
     }
+
+    result
 }
 
 fn create_engine(args: &Args) -> ChronosEngine {
@@ -99,8 +88,13 @@ fn register_scenes(engine: &mut ChronosEngine, scenes: Vec<Scene>) {
     }
 }
 
-fn run_test(test_name: &str, engine: &mut ChronosEngine) -> TestResult {
-    engine.set_current_scene(test_name);
+fn run_single_test(test_name: &str, engine: &mut ChronosEngine) -> TestResult {
+    if let Err(err) = engine.set_current_scene(test_name) {
+        let result = TestResult::error(err.to_string());
+        reporter::print_result(test_name, &result);
+        return result;
+    }
+
     let tested_bytes = engine.run_one_frame().expect("Failed to run one frame");
     let golden_bytes = get_golden_image_bytes(test_name);
 

@@ -1,5 +1,5 @@
 use clap::Parser;
-use tests::run;
+use tests::run_framework;
 
 mod args_parser;
 mod image_utils;
@@ -9,5 +9,5 @@ mod tests;
 mod workspace;
 
 fn main() {
-    run(&args_parser::Args::parse());
+    run_framework(&args_parser::Args::parse());
 }
