@@ -58,7 +58,7 @@ Examples:
 
 ```bash
 cargo run -p graphic-tests -- --graphic-api wgpu
-cargo run -p graphic-tests -- --test-name Triangle --graphic-api wgpu
+cargo run -p graphic-tests -- --test-name 2d_two_triangles --graphic-api wgpu
 ```
 
 ## CLI help
