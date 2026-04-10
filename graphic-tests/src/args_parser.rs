@@ -1,7 +1,7 @@
 use clap::{Parser, ValueEnum};
 
 /// This program runs graphical tests for APIs, such as Wgpu.
-/// It run a set of test cases and compares the generated images with a reference image to ensure correctness.
+/// It runs a set of test cases and compares the generated images with a reference image to ensure correctness.
 #[derive(Parser, Debug)]
 #[command(version, about, long_about = None)]
 pub struct Args {
