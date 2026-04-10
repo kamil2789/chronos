@@ -68,13 +68,13 @@ pub fn print_result(test_name: &str, result: &TestResult) {
     }
 }
 
-pub fn print_summary(results: RunResults) {
+pub fn print_summary(results: &RunResults) {
     let total = results.passed + results.failed_names.len();
     println!();
     println!("Results: {}/{} passed", results.passed, total);
     if !results.failed_names.is_empty() {
         println!("Failed tests:");
-        for name in results.failed_names {
+        for name in &results.failed_names {
             println!("  {} {}", "FAILED".red(), name);
         }
     }

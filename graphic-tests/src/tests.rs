@@ -26,7 +26,7 @@ pub struct RunResults {
     pub failed_names: Vec<String>,
 }
 
-pub fn run_framework(args: &Args) {
+pub fn run_framework(args: &Args) -> RunResults {
     prepare_working_directory();
     let mut engine = create_engine(args);
 
@@ -36,7 +36,8 @@ pub fn run_framework(args: &Args) {
 
     let results = run_tests(&mut engine, &args.test_name);
 
-    reporter::print_summary(results);
+    reporter::print_summary(&results);
+    results
 }
 
 impl RunResults {
@@ -46,6 +47,11 @@ impl RunResults {
         } else {
             self.failed_names.push(test_name.to_string());
         }
+    }
+
+    #[must_use]
+    pub fn has_failures(&self) -> bool {
+        !self.failed_names.is_empty()
     }
 }
 
