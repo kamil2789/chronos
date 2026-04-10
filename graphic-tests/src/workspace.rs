@@ -1,7 +1,9 @@
 use std::{env, fs};
 
 pub const TEST_RESULTS_DIR: &str = "failed_tests/";
-pub const GOLDEN_DIR: &str = "src/assets/golden_standart/";
+pub const GOLDEN_STANDARD_DIR: &str = "src/assets/golden_standard/";
+#[deprecated(note = "Use GOLDEN_STANDARD_DIR instead")]
+pub const GOLDEN_DIR: &str = GOLDEN_STANDARD_DIR;
 pub const TEST_PROJECT_NAME: &str = "graphic-tests";
 pub fn prepare_working_directory() {
     let current_path = env::current_dir().expect("Invalid current directory");
