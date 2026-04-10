@@ -1,15 +1,10 @@
 use crate::components::color::RGBA;
+use crate::renderer::Result;
 use crate::renderer::{Renderer, wgpu::WgpuRenderer};
-use crate::renderer::{RendererError, Result};
 
 impl Renderer for WgpuRenderer {
     fn render(&mut self, scene: &crate::scene::Scene) -> Result<()> {
-        self.render(scene).map_err(|e| match e {
-            wgpu::SurfaceError::Lost | wgpu::SurfaceError::Outdated => {
-                RendererError::Surface("Surface lost or outdated - resize required".to_string())
-            }
-            _ => RendererError::Render(format!("Failed to render frame: {e}")),
-        })
+        self.render(scene)
     }
 
     fn render_to_buffer(&mut self, scene: &crate::scene::Scene) -> Result<Vec<u8>> {
