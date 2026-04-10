@@ -201,7 +201,7 @@ pub fn compute_pass(diff: &DiffResult) -> TestResult {
 }
 
 pub fn get_golden_image_bytes(test_name: &str) -> Result<GoldenImage, String> {
-    let golden_path = format!("{}{}.png", workspace::GOLDEN_DIR, test_name);
+    let golden_path = format!("{}{}.png", workspace::GOLDEN_STANDARD_DIR, test_name);
     let image = image::open(&golden_path)
         .map_err(|err| format!("failed to open golden image '{golden_path}': {err}"))?
         .to_rgba8();
