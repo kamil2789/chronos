@@ -1,6 +1,5 @@
 mod game_loop;
 
-use std::collections::HashMap;
 use std::sync::Arc;
 use winit::application::ApplicationHandler;
 use winit::dpi::LogicalSize;
@@ -13,7 +12,7 @@ use tracing::{error, info, warn};
 use crate::configs::EngineConfig;
 use crate::graphic_engine::game_loop::GameLoop;
 use crate::renderer::{Renderer, RendererError, init_headless_render, init_render};
-use crate::scene::Scene;
+use crate::scene::{Scene, SceneManager};
 
 pub type Result<T> = std::result::Result<T, EngineError>;
 
@@ -38,8 +37,7 @@ pub struct ChronosEngine {
     window: Option<Arc<winit::window::Window>>,
     renderer: Option<Box<dyn Renderer>>,
     config: EngineConfig,
-    scene: HashMap<String, Scene>,
-    current_scene: Option<String>,
+    scene_manager: SceneManager,
 }
 
 impl ChronosEngine {
@@ -50,8 +48,7 @@ impl ChronosEngine {
             window: None,
             renderer: None,
             config,
-            scene: HashMap::new(),
-            current_scene: None,
+            scene_manager: SceneManager::default(),
         }
     }
 
@@ -72,39 +69,23 @@ impl ChronosEngine {
         Ok(())
     }
 
-    #[must_use]
-    pub fn get_sorted_scenes_names(&self) -> Vec<String> {
-        let mut keys: Vec<String> = self.scene.keys().cloned().collect();
-        keys.sort();
-        keys
-    }
-
     pub fn register_scene(&mut self, scene: Scene) {
-        let scene_name = scene.name.clone();
-        if self.scene.is_empty() {
-            self.current_scene = Some(scene_name.clone());
-        }
-        self.scene.insert(scene_name, scene);
+        self.scene_manager.register_scene(scene);
     }
 
     pub fn unregister_scene(&mut self, name: &str) {
-        self.scene.remove(name);
-        if self.current_scene == Some(name.to_string()) {
-            self.current_scene = None;
-            warn!("Current scene was unregistered, no active scene now");
-        }
+        self.scene_manager.unregister_scene(name);
     }
 
     /// # Errors
     ///
     /// Returns an error if the scene does not exist
     pub fn set_current_scene(&mut self, name: &str) -> Result<()> {
-        if self.scene.contains_key(name) {
-            self.current_scene = Some(name.to_string());
-            Ok(())
-        } else {
-            Err(EngineError::SceneNotFound(name.to_string()))
-        }
+        self.scene_manager.set_current_scene(name)
+    }
+
+    pub fn get_scenes(&self) -> impl Iterator<Item = &String> {
+        self.scene_manager.get_scenes()
     }
 
     /// # Errors
@@ -117,11 +98,10 @@ impl ChronosEngine {
         }
 
         if let Some(renderer) = &mut self.renderer
-            && let Some(current_scene) = &self.current_scene
-            && let Some(scene) = self.scene.get(current_scene)
+            && let Some(current_scene) = &self.scene_manager.get_active_scene()
         {
             return renderer
-                .render_to_buffer(scene)
+                .render_to_buffer(current_scene)
                 .map_err(EngineError::RendererError);
         }
         Ok(vec![])
@@ -148,16 +128,18 @@ impl ChronosEngine {
         Ok(window)
     }
 
-    fn on_redraw_requested(&mut self) {
-        if let Some(window) = &self.window {
-            if let Some(renderer) = &mut self.renderer
-                && let Some(current_scene) = &self.current_scene
-                && let Some(scene) = self.scene.get(current_scene)
-            {
-                GameLoop::main_frame(renderer.as_mut(), window, scene);
-            }
-            window.request_redraw();
+    fn on_redraw_requested(&mut self, event_loop: &ActiveEventLoop) {
+        let (Some(window), Some(renderer)) = (&self.window, &mut self.renderer) else {
+            error!("Renderer or Window not initialized — shutting down");
+            event_loop.exit();
+            return;
+        };
+
+        if let Some(scene) = self.scene_manager.get_active_scene() {
+            GameLoop::main_frame(renderer.as_mut(), window, scene);
         }
+
+        window.request_redraw();
     }
 
     fn on_close_requested(event_loop: &ActiveEventLoop) {
@@ -215,7 +197,7 @@ impl ApplicationHandler for ChronosEngine {
                 self.on_resize_requested(new_size.width, new_size.height);
             }
             WindowEvent::RedrawRequested => {
-                self.on_redraw_requested();
+                self.on_redraw_requested(event_loop);
             }
             _ => {}
         }
