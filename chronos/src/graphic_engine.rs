@@ -128,15 +128,18 @@ impl ChronosEngine {
         Ok(window)
     }
 
-    fn on_redraw_requested(&mut self) {
-        if let Some(window) = &self.window {
-            if let Some(renderer) = &mut self.renderer
-                && let Some(current_scene) = &self.scene_manager.get_active_scene()
-            {
-                GameLoop::main_frame(renderer.as_mut(), window, current_scene);
-            }
-            window.request_redraw();
+    fn on_redraw_requested(&mut self, event_loop: &ActiveEventLoop) {
+        let (Some(window), Some(renderer)) = (&self.window, &mut self.renderer) else {
+            error!("Renderer or Window not initialized — shutting down");
+            event_loop.exit();
+            return;
+        };
+
+        if let Some(scene) = self.scene_manager.get_active_scene() {
+            GameLoop::main_frame(renderer.as_mut(), window, scene);
         }
+
+        window.request_redraw();
     }
 
     fn on_close_requested(event_loop: &ActiveEventLoop) {
@@ -194,7 +197,7 @@ impl ApplicationHandler for ChronosEngine {
                 self.on_resize_requested(new_size.width, new_size.height);
             }
             WindowEvent::RedrawRequested => {
-                self.on_redraw_requested();
+                self.on_redraw_requested(event_loop);
             }
             _ => {}
         }
