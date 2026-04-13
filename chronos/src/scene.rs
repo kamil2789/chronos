@@ -43,7 +43,7 @@ impl SceneManager {
 
     pub fn unregister_scene(&mut self, name: &str) {
         self.scenes.remove(name);
-        if self.active_scene == Some(name.to_string()) {
+        if self.active_scene.as_deref() == Some(name) {
             self.active_scene = None;
             warn!("Current scene was unregistered, no active scene now");
         }
