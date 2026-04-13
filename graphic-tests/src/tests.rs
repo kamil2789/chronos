@@ -59,7 +59,7 @@ fn run_tests(engine: &mut ChronosEngine, test_name_arg: &str) -> RunResults {
     let mut result = RunResults::default();
 
     if test_name_arg.eq_ignore_ascii_case("all") {
-        let scene_names = engine.get_sorted_scenes_names();
+        let scene_names = engine.get_scenes().cloned().collect::<Vec<String>>();
 
         for scene_name in scene_names {
             let test_result = run_single_test(&scene_name, engine);
