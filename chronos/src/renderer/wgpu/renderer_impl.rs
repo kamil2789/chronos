@@ -1,15 +1,24 @@
 use crate::components::color::RGBA;
 use crate::renderer::Result;
 use crate::renderer::{Renderer, wgpu::WgpuRenderer};
+use crate::texture_registry::TextureRegistry;
 
 impl Renderer for WgpuRenderer {
-    fn render(&mut self, scene: &crate::scene::Scene) -> Result<()> {
-        self.render(scene)
+    fn render(
+        &mut self,
+        scene: &crate::scene::Scene,
+        texture_registry: &TextureRegistry,
+    ) -> Result<()> {
+        self.render(scene, texture_registry)
     }
 
-    fn render_to_buffer(&mut self, scene: &crate::scene::Scene) -> Result<Vec<u8>> {
+    fn render_to_buffer(
+        &mut self,
+        scene: &crate::scene::Scene,
+        texture_registry: &TextureRegistry,
+    ) -> Result<Vec<u8>> {
         self.set_background_color(&scene.background_color);
-        WgpuRenderer::render_to_buffer(self, scene)
+        WgpuRenderer::render_to_buffer(self, scene, texture_registry)
     }
 
     fn resize(&mut self, width: u32, height: u32) {

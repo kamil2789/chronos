@@ -15,12 +15,20 @@ use crate::renderer::wgpu::frame::EntityRenderCache;
 use crate::renderer::wgpu::gpu_context::GpuContext;
 use crate::renderer::wgpu::pipeline_manager::PipelineManager;
 
+pub struct GpuTextureResource {
+    #[allow(dead_code)]
+    pub texture: wgpu::Texture,
+    pub texture_view: wgpu::TextureView,
+    pub sampler: wgpu::Sampler,
+}
+
 pub struct WgpuRenderer {
     gpu_context: GpuContext,
     pipeline_manager: PipelineManager,
     background_color: RGBA,
-    // RefCell for interior mutability to allow caching during immutable render pass
     entity_cache: RefCell<HashMap<usize, EntityRenderCache>>,
+    texture_gpu_cache: RefCell<HashMap<String, GpuTextureResource>>,
+    last_scene_name: RefCell<Option<String>>,
 }
 
 impl WgpuRenderer {
@@ -39,6 +47,8 @@ impl WgpuRenderer {
             pipeline_manager,
             background_color: RGBA::default(),
             entity_cache: RefCell::new(HashMap::new()),
+            texture_gpu_cache: RefCell::new(HashMap::new()),
+            last_scene_name: RefCell::new(None),
         })
     }
 
@@ -57,6 +67,8 @@ impl WgpuRenderer {
             pipeline_manager,
             background_color: RGBA::default(),
             entity_cache: RefCell::new(HashMap::new()),
+            texture_gpu_cache: RefCell::new(HashMap::new()),
+            last_scene_name: RefCell::new(None),
         })
     }
 }

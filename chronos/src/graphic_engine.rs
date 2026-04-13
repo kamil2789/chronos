@@ -13,6 +13,7 @@ use crate::configs::EngineConfig;
 use crate::graphic_engine::game_loop::GameLoop;
 use crate::renderer::{Renderer, RendererError, init_headless_render, init_render};
 use crate::scene::{Scene, SceneManager};
+use crate::texture_registry::{TextureData, TextureDataError, TextureRegistry};
 
 pub type Result<T> = std::result::Result<T, EngineError>;
 
@@ -26,6 +27,8 @@ pub enum EngineError {
     RendererError(#[from] RendererError),
     #[error("Scene not found: {0}")]
     SceneNotFound(String),
+    #[error("Invalid texture data: {0}")]
+    InvalidTextureData(#[from] TextureDataError),
 }
 
 #[derive(Clone)]
@@ -38,6 +41,7 @@ pub struct ChronosEngine {
     renderer: Option<Box<dyn Renderer>>,
     config: EngineConfig,
     scene_manager: SceneManager,
+    texture_registry: TextureRegistry,
 }
 
 impl ChronosEngine {
@@ -49,6 +53,7 @@ impl ChronosEngine {
             renderer: None,
             config,
             scene_manager: SceneManager::default(),
+            texture_registry: TextureRegistry::default(),
         }
     }
 
@@ -88,6 +93,15 @@ impl ChronosEngine {
         self.scene_manager.get_scenes()
     }
 
+    pub fn register_texture(&mut self, id: &str, data: TextureData) {
+        self.texture_registry.register(id, data);
+    }
+
+    #[must_use]
+    pub fn texture_registry(&self) -> &TextureRegistry {
+        &self.texture_registry
+    }
+
     /// # Errors
     ///
     /// Returns an error if rendering fails
@@ -101,7 +115,7 @@ impl ChronosEngine {
             && let Some(current_scene) = &self.scene_manager.get_active_scene()
         {
             return renderer
-                .render_to_buffer(current_scene)
+                .render_to_buffer(current_scene, &self.texture_registry)
                 .map_err(EngineError::RendererError);
         }
         Ok(vec![])
@@ -136,7 +150,7 @@ impl ChronosEngine {
         };
 
         if let Some(scene) = self.scene_manager.get_active_scene() {
-            GameLoop::main_frame(renderer.as_mut(), window, scene);
+            GameLoop::main_frame(renderer.as_mut(), window, scene, &self.texture_registry);
         }
 
         window.request_redraw();
@@ -206,6 +220,7 @@ impl ApplicationHandler for ChronosEngine {
 
 pub struct HeadlessRenderer {
     renderer: Box<dyn Renderer>,
+    texture_registry: TextureRegistry,
 }
 
 impl HeadlessRenderer {
@@ -216,7 +231,14 @@ impl HeadlessRenderer {
     /// Returns an error if GPU initialization fails.
     pub fn new(width: u32, height: u32, renderer_type: &RendererType) -> Result<Self> {
         let renderer = init_headless_render(width, height, renderer_type)?;
-        Ok(Self { renderer })
+        Ok(Self {
+            renderer,
+            texture_registry: TextureRegistry::default(),
+        })
+    }
+
+    pub fn register_texture(&mut self, id: &str, data: TextureData) {
+        self.texture_registry.register(id, data);
     }
 
     /// Renders a single frame of the scene and returns raw RGBA pixel data.
@@ -226,7 +248,7 @@ impl HeadlessRenderer {
     /// Returns an error if rendering fails.
     pub fn render_to_buffer(&mut self, scene: &Scene) -> Result<Vec<u8>> {
         self.renderer
-            .render_to_buffer(scene)
+            .render_to_buffer(scene, &self.texture_registry)
             .map_err(EngineError::RendererError)
     }
 }

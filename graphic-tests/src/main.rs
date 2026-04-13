@@ -4,10 +4,12 @@ use tests::run_framework;
 use tracing_subscriber::EnvFilter;
 
 mod args_parser;
+mod assets;
 mod image_comparison;
 mod reporter;
 mod test_collector;
 mod tests;
+mod texture_loader;
 mod workspace;
 
 fn main() -> ExitCode {

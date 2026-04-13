@@ -13,7 +13,7 @@ pub struct Scene {
 
 #[derive(Default)]
 pub(crate) struct SceneManager {
-    pub(crate) scenes: BTreeMap<String, Scene>,
+    scenes: BTreeMap<String, Scene>,
     active_scene: Option<String>,
 }
 

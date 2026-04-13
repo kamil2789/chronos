@@ -1,4 +1,7 @@
-use crate::{components::color::RGBA, graphic_engine::RendererType, renderer::wgpu::WgpuRenderer};
+use crate::{
+    components::color::RGBA, graphic_engine::RendererType, renderer::wgpu::WgpuRenderer,
+    texture_registry::TextureRegistry,
+};
 use std::sync::Arc;
 use winit::window::Window;
 
@@ -24,8 +27,16 @@ pub enum ShaderId {
 }
 
 pub trait Renderer {
-    fn render(&mut self, scene: &crate::scene::Scene) -> Result<()>;
-    fn render_to_buffer(&mut self, scene: &crate::scene::Scene) -> Result<Vec<u8>>;
+    fn render(
+        &mut self,
+        scene: &crate::scene::Scene,
+        texture_registry: &TextureRegistry,
+    ) -> Result<()>;
+    fn render_to_buffer(
+        &mut self,
+        scene: &crate::scene::Scene,
+        texture_registry: &TextureRegistry,
+    ) -> Result<Vec<u8>>;
     fn resize(&mut self, width: u32, height: u32);
     fn set_background_color(&mut self, color: &RGBA);
 }

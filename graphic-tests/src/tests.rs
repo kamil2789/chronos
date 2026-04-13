@@ -6,6 +6,7 @@ use chronos::{
 
 use crate::{
     args_parser::{Args, GraphicApi},
+    assets::register_assets,
     image_comparison::{
         TestResult, check_buffer_size, compute_diff, compute_pass, get_golden_image_bytes,
         save_result_images,
@@ -16,6 +17,7 @@ use crate::{
 };
 
 pub(crate) mod basic_2d_geometries;
+pub(crate) mod basic_2d_textures;
 
 pub const CHANNEL_TOLERANCE: u8 = 2;
 pub const PIXEL_FAIL_THRESHOLD_PCT: f64 = 0.01;
@@ -30,6 +32,7 @@ pub fn run_framework(args: &Args) -> RunResults {
     prepare_working_directory();
     let mut engine = create_engine(args);
 
+    register_assets(&mut engine).expect("Failed to register assets");
     register_scenes(&mut engine, collect_wgpu_tests());
 
     engine.start().expect("Failed to start engine");
