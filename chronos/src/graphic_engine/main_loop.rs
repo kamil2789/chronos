@@ -7,16 +7,16 @@ use crate::{
     texture_registry::TextureRegistry,
 };
 
-pub struct GameLoop {}
+pub struct MainLoop {}
 
-impl GameLoop {
+impl MainLoop {
     pub fn main_frame(
         renderer: &mut dyn Renderer,
         window: &Window,
         actual_scene: &Scene,
         texture_registry: &TextureRegistry,
     ) {
-        GameLoop::run_render(renderer, window, actual_scene, texture_registry);
+        MainLoop::run_render(renderer, window, actual_scene, texture_registry);
     }
 
     fn run_render(

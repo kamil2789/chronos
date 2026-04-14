@@ -3,7 +3,7 @@ use wgpu::util::DeviceExt;
 
 use crate::components::color::Color;
 use crate::components::shape::Shape;
-use crate::components::texture::TextureComponent;
+use crate::components::texture::{AddressMode, FilterMode, MipmapFilterMode, TextureComponent};
 use crate::entity;
 use crate::renderer::Result;
 use crate::scene::Scene;
@@ -479,16 +479,17 @@ impl WgpuRenderer {
                 );
 
                 let texture_view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+                let sampler_cfg = texture_component.sampler_config();
                 let sampler = self
                     .gpu_context
                     .device
                     .create_sampler(&wgpu::SamplerDescriptor {
-                        address_mode_u: wgpu::AddressMode::ClampToEdge,
-                        address_mode_v: wgpu::AddressMode::ClampToEdge,
+                        address_mode_u: map_address_mode(sampler_cfg.address_mode_u),
+                        address_mode_v: map_address_mode(sampler_cfg.address_mode_v),
                         address_mode_w: wgpu::AddressMode::ClampToEdge,
-                        mag_filter: wgpu::FilterMode::Linear,
-                        min_filter: wgpu::FilterMode::Nearest,
-                        mipmap_filter: wgpu::MipmapFilterMode::Nearest,
+                        mag_filter: map_filter_mode(sampler_cfg.mag_filter),
+                        min_filter: map_filter_mode(sampler_cfg.min_filter),
+                        mipmap_filter: map_mipmap_filter_mode(sampler_cfg.mipmap_filter),
                         ..Default::default()
                     });
 
@@ -569,5 +570,27 @@ impl WgpuRenderer {
         }
         render_pass.set_vertex_buffer(0, cache.vertex_buffer.slice(..));
         render_pass.draw(0..cache.vertex_count, 0..1);
+    }
+}
+
+fn map_address_mode(mode: AddressMode) -> wgpu::AddressMode {
+    match mode {
+        AddressMode::ClampToEdge => wgpu::AddressMode::ClampToEdge,
+        AddressMode::Repeat => wgpu::AddressMode::Repeat,
+        AddressMode::MirrorRepeat => wgpu::AddressMode::MirrorRepeat,
+    }
+}
+
+fn map_filter_mode(mode: FilterMode) -> wgpu::FilterMode {
+    match mode {
+        FilterMode::Linear => wgpu::FilterMode::Linear,
+        FilterMode::Nearest => wgpu::FilterMode::Nearest,
+    }
+}
+
+fn map_mipmap_filter_mode(mode: MipmapFilterMode) -> wgpu::MipmapFilterMode {
+    match mode {
+        MipmapFilterMode::Nearest => wgpu::MipmapFilterMode::Nearest,
+        MipmapFilterMode::Linear => wgpu::MipmapFilterMode::Linear,
     }
 }
