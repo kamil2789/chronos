@@ -2,6 +2,7 @@ use std::{env, fs};
 
 pub const TEST_RESULTS_DIR: &str = "failed_tests/";
 pub const GOLDEN_STANDARD_DIR: &str = "src/assets/golden_standard/";
+pub const TEXTURES_DIR: &str = "src/assets/textures/";
 pub const TEST_PROJECT_NAME: &str = "graphic-tests";
 pub fn prepare_working_directory() {
     let current_path = env::current_dir().expect("Invalid current directory");

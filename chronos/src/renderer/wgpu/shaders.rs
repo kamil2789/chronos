@@ -8,10 +8,12 @@ pub type ShaderName = String;
 
 static UNIFORM_COLOR_WGSL: &str = include_str!("shaders/uniform_color.wgsl");
 static VERTEX_COLOR_WGSL: &str = include_str!("shaders/vertex_color.wgsl");
+static TEXTURED_WGSL: &str = include_str!("shaders/textured.wgsl");
 
-static SHADER_SOURCES: [(&str, &str); 2] = [
+static SHADER_SOURCES: [(&str, &str); 3] = [
     ("uniform_color", UNIFORM_COLOR_WGSL),
     ("vertex_color", VERTEX_COLOR_WGSL),
+    ("textured", TEXTURED_WGSL),
 ];
 
 pub struct ShaderManager {
