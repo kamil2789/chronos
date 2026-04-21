@@ -1,5 +1,5 @@
 use chronos::{
-    components::{color::RGBA, shape::Shape, texture::TextureComponent},
+    components::{color::RGBA, shape::Shape, texture::Texture},
     scene::Scene,
 };
 use glam::Vec3;
@@ -26,7 +26,7 @@ pub fn test_textured_rectangle() -> Scene {
         Vec3::new(-0.5, 0.5, 0.0),
     ]);
 
-    let texture = TextureComponent::new(
+    let texture = Texture::new(
         texture_ids::WOOD,
         vec![
             [0.0, 1.0], // bottom-left

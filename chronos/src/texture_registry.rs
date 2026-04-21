@@ -56,7 +56,7 @@ impl TextureData {
 }
 
 #[derive(Default)]
-pub struct TextureRegistry {
+pub(crate) struct TextureRegistry {
     textures: HashMap<String, Arc<TextureData>>,
 }
 
@@ -68,10 +68,5 @@ impl TextureRegistry {
     #[must_use]
     pub fn get(&self, id: &str) -> Option<Arc<TextureData>> {
         self.textures.get(id).cloned()
-    }
-
-    #[must_use]
-    pub fn contains(&self, id: &str) -> bool {
-        self.textures.contains_key(id)
     }
 }

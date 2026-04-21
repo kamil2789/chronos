@@ -1,4 +1,4 @@
-mod game_loop;
+mod main_loop;
 
 use std::sync::Arc;
 use winit::application::ApplicationHandler;
@@ -10,7 +10,7 @@ use winit::window::{Window, WindowId};
 use tracing::{error, info, warn};
 
 use crate::configs::EngineConfig;
-use crate::graphic_engine::game_loop::GameLoop;
+use crate::graphic_engine::main_loop::MainLoop;
 use crate::renderer::{Renderer, RendererError, init_headless_render, init_render};
 use crate::scene::{Scene, SceneManager};
 use crate::texture_registry::{TextureData, TextureDataError, TextureRegistry};
@@ -97,11 +97,6 @@ impl ChronosEngine {
         self.texture_registry.register(id, data);
     }
 
-    #[must_use]
-    pub fn texture_registry(&self) -> &TextureRegistry {
-        &self.texture_registry
-    }
-
     /// # Errors
     ///
     /// Returns an error if rendering fails
@@ -150,7 +145,7 @@ impl ChronosEngine {
         };
 
         if let Some(scene) = self.scene_manager.get_active_scene() {
-            GameLoop::main_frame(renderer.as_mut(), window, scene, &self.texture_registry);
+            MainLoop::main_frame(renderer.as_mut(), window, scene, &self.texture_registry);
         }
 
         window.request_redraw();

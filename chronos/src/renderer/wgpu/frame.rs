@@ -3,7 +3,7 @@ use wgpu::util::DeviceExt;
 
 use crate::components::color::Color;
 use crate::components::shape::Shape;
-use crate::components::texture::TextureComponent;
+use crate::components::texture::{AddressMode, FilterMode, MipmapFilterMode, Texture};
 use crate::entity;
 use crate::renderer::Result;
 use crate::scene::Scene;
@@ -221,14 +221,11 @@ impl WgpuRenderer {
         }
 
         // Render textured entities
-        let textured_entities =
-            entity::query_entities!(scene.entity_manager, Shape, TextureComponent);
+        let textured_entities = entity::query_entities!(scene.entity_manager, Shape, Texture);
         for entity_id in textured_entities {
             if let (Some(shape), Some(tex)) = (
                 scene.entity_manager.get_component::<Shape>(entity_id),
-                scene
-                    .entity_manager
-                    .get_component::<TextureComponent>(entity_id),
+                scene.entity_manager.get_component::<Texture>(entity_id),
             ) && let Some(pipeline) = &self.pipeline_manager.textured_pipeline
             {
                 self.render_entity_with_texture(
@@ -418,7 +415,7 @@ impl WgpuRenderer {
         pipeline: &wgpu::RenderPipeline,
         entity_id: usize,
         shape: &Shape,
-        texture_component: &TextureComponent,
+        texture_component: &Texture,
         texture_registry: &TextureRegistry,
     ) {
         let label = texture_component.label();
@@ -427,7 +424,7 @@ impl WgpuRenderer {
             return;
         };
 
-        let texture_mapping = texture_component.texture_mapping();
+        let texture_mapping = texture_component.cord_mapping();
         let vertices = shape.get_vertices();
 
         if texture_mapping.len() != vertices.len() {
@@ -479,16 +476,17 @@ impl WgpuRenderer {
                 );
 
                 let texture_view = texture.create_view(&wgpu::TextureViewDescriptor::default());
+                let config = texture_component.get_config();
                 let sampler = self
                     .gpu_context
                     .device
                     .create_sampler(&wgpu::SamplerDescriptor {
-                        address_mode_u: wgpu::AddressMode::ClampToEdge,
-                        address_mode_v: wgpu::AddressMode::ClampToEdge,
+                        address_mode_u: map_address_mode(config.address_mode_u),
+                        address_mode_v: map_address_mode(config.address_mode_v),
                         address_mode_w: wgpu::AddressMode::ClampToEdge,
-                        mag_filter: wgpu::FilterMode::Linear,
-                        min_filter: wgpu::FilterMode::Nearest,
-                        mipmap_filter: wgpu::MipmapFilterMode::Nearest,
+                        mag_filter: map_filter_mode(config.mag_filter),
+                        min_filter: map_filter_mode(config.min_filter),
+                        mipmap_filter: map_mipmap_filter_mode(config.mipmap_filter),
                         ..Default::default()
                     });
 
@@ -569,5 +567,27 @@ impl WgpuRenderer {
         }
         render_pass.set_vertex_buffer(0, cache.vertex_buffer.slice(..));
         render_pass.draw(0..cache.vertex_count, 0..1);
+    }
+}
+
+fn map_address_mode(mode: AddressMode) -> wgpu::AddressMode {
+    match mode {
+        AddressMode::ClampToEdge => wgpu::AddressMode::ClampToEdge,
+        AddressMode::Repeat => wgpu::AddressMode::Repeat,
+        AddressMode::MirrorRepeat => wgpu::AddressMode::MirrorRepeat,
+    }
+}
+
+fn map_filter_mode(mode: FilterMode) -> wgpu::FilterMode {
+    match mode {
+        FilterMode::Linear => wgpu::FilterMode::Linear,
+        FilterMode::Nearest => wgpu::FilterMode::Nearest,
+    }
+}
+
+fn map_mipmap_filter_mode(mode: MipmapFilterMode) -> wgpu::MipmapFilterMode {
+    match mode {
+        MipmapFilterMode::Nearest => wgpu::MipmapFilterMode::Nearest,
+        MipmapFilterMode::Linear => wgpu::MipmapFilterMode::Linear,
     }
 }
