@@ -21,7 +21,7 @@ pub enum MipmapFilterMode {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct TextureSamplerConfig {
+pub struct TextureConfig {
     pub address_mode_u: AddressMode,
     pub address_mode_v: AddressMode,
     pub mag_filter: FilterMode,
@@ -29,7 +29,7 @@ pub struct TextureSamplerConfig {
     pub mipmap_filter: MipmapFilterMode,
 }
 
-impl Default for TextureSamplerConfig {
+impl Default for TextureConfig {
     fn default() -> Self {
         Self {
             address_mode_u: AddressMode::ClampToEdge,
@@ -42,25 +42,25 @@ impl Default for TextureSamplerConfig {
 }
 
 #[derive(Clone, Debug)]
-pub struct TextureComponent {
+pub struct Texture {
     label: String,
-    texture_mapping: Vec<[f32; 2]>,
-    sampler_config: TextureSamplerConfig,
+    cord_mapping: Vec<[f32; 2]>,
+    config: TextureConfig,
 }
 
-impl TextureComponent {
+impl Texture {
     #[must_use]
-    pub fn new(label: &str, texture_mapping: Vec<[f32; 2]>) -> Self {
+    pub fn new(label: &str, cord_mapping: Vec<[f32; 2]>) -> Self {
         Self {
             label: label.to_string(),
-            texture_mapping,
-            sampler_config: TextureSamplerConfig::default(),
+            cord_mapping,
+            config: TextureConfig::default(),
         }
     }
 
     #[must_use]
-    pub fn with_sampler_config(mut self, config: TextureSamplerConfig) -> Self {
-        self.sampler_config = config;
+    pub fn with_config(mut self, config: TextureConfig) -> Self {
+        self.config = config;
         self
     }
 
@@ -70,12 +70,12 @@ impl TextureComponent {
     }
 
     #[must_use]
-    pub fn texture_mapping(&self) -> &[[f32; 2]] {
-        &self.texture_mapping
+    pub fn cord_mapping(&self) -> &[[f32; 2]] {
+        &self.cord_mapping
     }
 
     #[must_use]
-    pub fn sampler_config(&self) -> &TextureSamplerConfig {
-        &self.sampler_config
+    pub fn get_config(&self) -> &TextureConfig {
+        &self.config
     }
 }

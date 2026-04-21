@@ -3,7 +3,7 @@ use wgpu::util::DeviceExt;
 
 use crate::components::color::Color;
 use crate::components::shape::Shape;
-use crate::components::texture::{AddressMode, FilterMode, MipmapFilterMode, TextureComponent};
+use crate::components::texture::{AddressMode, FilterMode, MipmapFilterMode, Texture};
 use crate::entity;
 use crate::renderer::Result;
 use crate::scene::Scene;
@@ -221,14 +221,11 @@ impl WgpuRenderer {
         }
 
         // Render textured entities
-        let textured_entities =
-            entity::query_entities!(scene.entity_manager, Shape, TextureComponent);
+        let textured_entities = entity::query_entities!(scene.entity_manager, Shape, Texture);
         for entity_id in textured_entities {
             if let (Some(shape), Some(tex)) = (
                 scene.entity_manager.get_component::<Shape>(entity_id),
-                scene
-                    .entity_manager
-                    .get_component::<TextureComponent>(entity_id),
+                scene.entity_manager.get_component::<Texture>(entity_id),
             ) && let Some(pipeline) = &self.pipeline_manager.textured_pipeline
             {
                 self.render_entity_with_texture(
@@ -418,7 +415,7 @@ impl WgpuRenderer {
         pipeline: &wgpu::RenderPipeline,
         entity_id: usize,
         shape: &Shape,
-        texture_component: &TextureComponent,
+        texture_component: &Texture,
         texture_registry: &TextureRegistry,
     ) {
         let label = texture_component.label();
@@ -427,7 +424,7 @@ impl WgpuRenderer {
             return;
         };
 
-        let texture_mapping = texture_component.texture_mapping();
+        let texture_mapping = texture_component.cord_mapping();
         let vertices = shape.get_vertices();
 
         if texture_mapping.len() != vertices.len() {
@@ -479,17 +476,17 @@ impl WgpuRenderer {
                 );
 
                 let texture_view = texture.create_view(&wgpu::TextureViewDescriptor::default());
-                let sampler_cfg = texture_component.sampler_config();
+                let config = texture_component.get_config();
                 let sampler = self
                     .gpu_context
                     .device
                     .create_sampler(&wgpu::SamplerDescriptor {
-                        address_mode_u: map_address_mode(sampler_cfg.address_mode_u),
-                        address_mode_v: map_address_mode(sampler_cfg.address_mode_v),
+                        address_mode_u: map_address_mode(config.address_mode_u),
+                        address_mode_v: map_address_mode(config.address_mode_v),
                         address_mode_w: wgpu::AddressMode::ClampToEdge,
-                        mag_filter: map_filter_mode(sampler_cfg.mag_filter),
-                        min_filter: map_filter_mode(sampler_cfg.min_filter),
-                        mipmap_filter: map_mipmap_filter_mode(sampler_cfg.mipmap_filter),
+                        mag_filter: map_filter_mode(config.mag_filter),
+                        min_filter: map_filter_mode(config.min_filter),
+                        mipmap_filter: map_mipmap_filter_mode(config.mipmap_filter),
                         ..Default::default()
                     });
 
