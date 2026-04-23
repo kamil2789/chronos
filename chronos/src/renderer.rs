@@ -1,6 +1,6 @@
 use crate::{
-    components::color::RGBA, graphic_engine::RendererType, renderer::wgpu::WgpuRenderer,
-    texture_registry::TextureRegistry,
+    components::color::RGBA, configs::Resolution, graphic_engine::RendererType,
+    renderer::wgpu::WgpuRenderer, texture_registry::TextureRegistry,
 };
 use std::sync::Arc;
 use winit::window::Window;
@@ -37,7 +37,7 @@ pub trait Renderer {
         scene: &crate::scene::Scene,
         texture_registry: &TextureRegistry,
     ) -> Result<Vec<u8>>;
-    fn resize(&mut self, width: u32, height: u32);
+    fn resize(&mut self, resolution: Resolution);
     fn set_background_color(&mut self, color: &RGBA);
 }
 

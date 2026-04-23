@@ -2,14 +2,14 @@ mod main_loop;
 
 use std::sync::Arc;
 use winit::application::ApplicationHandler;
-use winit::dpi::LogicalSize;
+use winit::dpi::{LogicalSize, PhysicalSize};
 use winit::event::WindowEvent;
 use winit::event_loop::{ActiveEventLoop, ControlFlow, EventLoop};
 use winit::window::{Window, WindowId};
 
 use tracing::{error, info, warn};
 
-use crate::configs::EngineConfig;
+use crate::configs::{EngineConfig, Resolution};
 use crate::graphic_engine::main_loop::MainLoop;
 use crate::renderer::{Renderer, RendererError, init_headless_render, init_render};
 use crate::scene::{Scene, SceneManager};
@@ -155,9 +155,12 @@ impl ChronosEngine {
         event_loop.exit();
     }
 
-    fn on_resize_requested(&mut self, width: u32, height: u32) {
+    fn on_resize_requested(&mut self, physical_size: PhysicalSize<u32>) {
         if let Some(renderer) = &mut self.renderer {
-            renderer.resize(width, height);
+            renderer.resize(Resolution {
+                width: physical_size.width,
+                height: physical_size.height,
+            });
         }
     }
 
@@ -203,7 +206,7 @@ impl ApplicationHandler for ChronosEngine {
                 Self::on_close_requested(event_loop);
             }
             WindowEvent::Resized(new_size) => {
-                self.on_resize_requested(new_size.width, new_size.height);
+                self.on_resize_requested(new_size);
             }
             WindowEvent::RedrawRequested => {
                 self.on_redraw_requested(event_loop);

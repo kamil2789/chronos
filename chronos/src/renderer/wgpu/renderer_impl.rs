@@ -1,4 +1,5 @@
 use crate::components::color::RGBA;
+use crate::configs::Resolution;
 use crate::renderer::Result;
 use crate::renderer::{Renderer, wgpu::WgpuRenderer};
 use crate::texture_registry::TextureRegistry;
@@ -21,15 +22,14 @@ impl Renderer for WgpuRenderer {
         WgpuRenderer::render_to_buffer(self, scene, texture_registry)
     }
 
-    fn resize(&mut self, width: u32, height: u32) {
-        if width > 0 && height > 0 {
-            self.gpu_context.width = width;
-            self.gpu_context.height = height;
+    fn resize(&mut self, resolution: Resolution) {
+        if resolution.width > 0 && resolution.height > 0 {
+            self.gpu_context.resolution = resolution;
             if let (Some(surface), Some(config)) =
                 (&self.gpu_context.surface, &mut self.gpu_context.config)
             {
-                config.width = width;
-                config.height = height;
+                config.width = self.gpu_context.resolution.width;
+                config.height = self.gpu_context.resolution.height;
                 surface.configure(&self.gpu_context.device, config);
             }
         }

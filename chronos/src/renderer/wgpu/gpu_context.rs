@@ -4,16 +4,18 @@ use wgpu::MemoryHints;
 use winit::dpi::PhysicalSize;
 use winit::window::Window;
 
-use crate::renderer::{RendererError, Result};
+use crate::{
+    configs,
+    renderer::{RendererError, Result},
+};
 
 pub struct GpuContext {
     pub surface: Option<wgpu::Surface<'static>>,
     pub device: wgpu::Device,
     pub queue: wgpu::Queue,
-    pub config: Option<wgpu::SurfaceConfiguration>,
     pub texture_format: wgpu::TextureFormat,
-    pub width: u32,
-    pub height: u32,
+    pub config: Option<wgpu::SurfaceConfiguration>,
+    pub resolution: configs::Resolution,
 }
 
 impl GpuContext {
@@ -26,16 +28,18 @@ impl GpuContext {
 
         let config = Self::create_surface_config(&surface, &adapter, size);
         surface.configure(&device, &config);
-        let texture_format = config.format;
+        let resolution = configs::Resolution {
+            width: config.width,
+            height: config.height,
+        };
 
         Ok(Self {
             surface: Some(surface),
             device,
             queue,
-            width: config.width,
-            height: config.height,
+            resolution,
+            texture_format: config.format,
             config: Some(config),
-            texture_format,
         })
     }
 
@@ -49,10 +53,9 @@ impl GpuContext {
             surface: None,
             device,
             queue,
-            config: None,
             texture_format,
-            width,
-            height,
+            config: None,
+            resolution: configs::Resolution { width, height },
         })
     }
 

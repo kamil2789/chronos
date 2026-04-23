@@ -16,6 +16,11 @@ pub struct TextureData {
     bytes: Vec<u8>,
 }
 
+#[derive(Default)]
+pub(crate) struct TextureRegistry {
+    textures: HashMap<String, Arc<TextureData>>,
+}
+
 impl TextureData {
     /// Creates a new `TextureData` from raw RGBA bytes.
     ///
@@ -53,11 +58,6 @@ impl TextureData {
     pub fn bytes(&self) -> &[u8] {
         &self.bytes
     }
-}
-
-#[derive(Default)]
-pub(crate) struct TextureRegistry {
-    textures: HashMap<String, Arc<TextureData>>,
 }
 
 impl TextureRegistry {

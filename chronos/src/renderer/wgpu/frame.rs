@@ -83,8 +83,8 @@ impl WgpuRenderer {
         scene: &Scene,
         texture_registry: &TextureRegistry,
     ) -> crate::renderer::Result<Vec<u8>> {
-        let width = self.gpu_context.width;
-        let height = self.gpu_context.height;
+        let width = self.gpu_context.resolution.width;
+        let height = self.gpu_context.resolution.height;
         let texture_format = self.gpu_context.texture_format;
 
         let texture = self

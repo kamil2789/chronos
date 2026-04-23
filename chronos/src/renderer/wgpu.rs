@@ -25,10 +25,10 @@ pub struct GpuTextureResource {
 pub struct WgpuRenderer {
     gpu_context: GpuContext,
     pipeline_manager: PipelineManager,
-    background_color: RGBA,
-    entity_cache: RefCell<HashMap<usize, EntityRenderCache>>,
-    texture_gpu_cache: RefCell<HashMap<String, GpuTextureResource>>,
-    last_scene_name: RefCell<Option<String>>,
+    background_color: RGBA, //TODO: too low lvl
+    entity_cache: RefCell<HashMap<usize, EntityRenderCache>>, //TODO: No idead what is going on here
+    texture_gpu_cache: RefCell<HashMap<String, GpuTextureResource>>, //TODO: Same as above, but for textures
+    last_scene_name: RefCell<Option<String>>,                        //TODO: too low lvl
 }
 
 impl WgpuRenderer {
